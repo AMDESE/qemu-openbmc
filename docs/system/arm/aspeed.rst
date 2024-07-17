@@ -42,6 +42,7 @@ AST2600 SoC based machines :
 AST2700 SoC based machines :
 
 - ``ast2700-evb``          Aspeed AST2700 Evaluation board (Cortex-A35)
+- ``malta-bmc``            AMD malta BMC (Cortex-A35)
 
 Supported devices
 -----------------
