@@ -38,6 +38,7 @@ AST2600 SoC based machines :
 - ``gb200nvl-bmc``         Nvidia GB200nvl BMC
 - ``qcom-dc-scm-v1-bmc``   Qualcomm DC-SCM V1 BMC
 - ``qcom-firework-bmc``    Qualcomm Firework BMC
+- ``hawaii-bmc``           AMD Hawaii BMC (Cortex-A7)
 
 Supported devices
 -----------------
