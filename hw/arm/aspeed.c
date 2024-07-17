@@ -206,6 +206,11 @@ struct AspeedMachineState {
 #define BLETCHLEY_BMC_HW_STRAP1 AST2600_EVB_HW_STRAP1
 #define BLETCHLEY_BMC_HW_STRAP2 AST2600_EVB_HW_STRAP2
 
+/* Hawai hardware value */
+/* TODO: Leave same as EVB for now. */
+#define HAWAI_BMC_HW_STRAP1 AST2600_EVB_HW_STRAP1
+#define HAWAI_BMC_HW_STRAP2 AST2600_EVB_HW_STRAP2
+
 /* Qualcomm DC-SCM hardware value */
 #define QCOM_DC_SCM_V1_BMC_HW_STRAP1  0x00000000
 #define QCOM_DC_SCM_V1_BMC_HW_STRAP2  0x00000041
@@ -1077,6 +1082,55 @@ static void qcom_dc_scm_firework_i2c_init(AspeedMachineState *bmc)
     i2c_slave_create_simple(aspeed_i2c_get_bus(&soc->i2c, 9), "max31785", 0x54);
 }
 
+static void onyx_bmc_i2c_init(AspeedMachineState *bmc)
+{
+    AspeedSoCState *soc = bmc->soc;
+    I2CSlave *i2c_switch;
+
+    I2CBus *i2c[15] = {};
+    for (int i = 0; i < 15; i++) {
+        if ((i == 2) || (i == 6) || (i == 13)) {
+            continue;
+        }
+        i2c[i] = aspeed_i2c_get_bus(&soc->i2c, i);
+    }
+
+    /* Bus 5 */
+    i2c_slave_create_simple(i2c[5], "pca9546", 0x71);
+
+    /* Bus 7 */
+    at24c_eeprom_init(i2c[5], 0x50, 32768);
+
+    /* Bus 9 */
+    i2c_switch = i2c_slave_create_simple(i2c[9], "pca9548", 0x70);
+    /*Missing model emc2305 using emc1413 */
+    i2c_slave_create_simple(pca954x_i2c_get_bus(i2c_switch, 0), "emc1413", 0x4d);
+    i2c_slave_create_simple(pca954x_i2c_get_bus(i2c_switch, 1), "emc1413", 0x4d);
+    i2c_slave_create_simple(pca954x_i2c_get_bus(i2c_switch, 2), "emc1413", 0x4d);
+    i2c_slave_create_simple(pca954x_i2c_get_bus(i2c_switch, 3), "emc1413", 0x4d);
+    i2c_slave_create_simple(pca954x_i2c_get_bus(i2c_switch, 5), TYPE_LM75, 0x48);
+    i2c_slave_create_simple(pca954x_i2c_get_bus(i2c_switch, 5), TYPE_LM75, 0x49);
+    i2c_slave_create_simple(pca954x_i2c_get_bus(i2c_switch, 5), TYPE_LM75, 0x4a);
+    i2c_slave_create_simple(pca954x_i2c_get_bus(i2c_switch, 5), TYPE_LM75, 0x4b);
+    i2c_slave_create_simple(pca954x_i2c_get_bus(i2c_switch, 5), TYPE_LM75, 0x4c);
+    i2c_slave_create_simple(pca954x_i2c_get_bus(i2c_switch, 5), TYPE_LM75, 0x4d);
+    i2c_slave_create_simple(pca954x_i2c_get_bus(i2c_switch, 5), TYPE_LM75, 0x4e);
+    i2c_slave_create_simple(pca954x_i2c_get_bus(i2c_switch, 5), TYPE_LM75, 0x4f);
+    /*Missing model tmp468 , using tmp423 */
+    i2c_slave_create_simple(pca954x_i2c_get_bus(i2c_switch, 7), "tmp423", 0x48);
+
+    /* Bus 10 */
+    i2c_slave_create_simple(i2c[10], "pca9548", 0x70);
+
+    i2c_switch = i2c_slave_create_simple(i2c[10], "pca9546", 0x71);
+    i2c_slave_create_simple(pca954x_i2c_get_bus(i2c_switch, 0), "pca9548", 0x72);
+    at24c_eeprom_init(pca954x_i2c_get_bus(i2c_switch, 0), 0x50, 32768);
+    at24c_eeprom_init(pca954x_i2c_get_bus(i2c_switch, 0), 0x51, 32768);
+
+    /* Bus 14 */
+    at24c_eeprom_init(i2c[14], 0x50, 32768);
+}
+
 static bool aspeed_get_mmio_exec(Object *obj, Error **errp)
 {
     return ASPEED_MACHINE(obj)->mmio_exec;
@@ -1653,6 +1707,24 @@ static void aspeed_minibmc_machine_ast1030_evb_class_init(ObjectClass *oc,
     aspeed_machine_class_init_cpus_defaults(mc);
 }
 
+static void aspeed_machine_onyx_class_init(ObjectClass *oc, void *data)
+{
+    MachineClass *mc = MACHINE_CLASS(oc);
+    AspeedMachineClass *amc = ASPEED_MACHINE_CLASS(oc);
+
+    mc->desc       = "AMD Onyx BMC (Cortex-A7)";
+    amc->soc_name  = "ast2600-a3";
+    amc->hw_strap1 = HAWAI_BMC_HW_STRAP1;
+    amc->hw_strap2 = HAWAI_BMC_HW_STRAP2;
+    amc->fmc_model = "w25q01jvq";
+    amc->spi_model = "w25q512jv";
+    amc->num_cs    = 2;
+    amc->macs_mask = ASPEED_MAC2_ON;
+    amc->i2c_init  = onyx_bmc_i2c_init;
+    mc->default_ram_size = 1 * GiB;;
+    aspeed_machine_class_init_cpus_defaults(mc);
+}
+
 #ifdef TARGET_AARCH64
 static void aspeed_machine_ast2700_evb_class_init(ObjectClass *oc, void *data)
 {
@@ -1815,6 +1887,10 @@ static const TypeInfo aspeed_machine_types[] = {
         .name           = MACHINE_TYPE_NAME("ast1030-evb"),
         .parent         = TYPE_ASPEED_MACHINE,
         .class_init     = aspeed_minibmc_machine_ast1030_evb_class_init,
+    }, {
+        .name          = MACHINE_TYPE_NAME("onyx-bmc"),
+        .parent        = TYPE_ASPEED_MACHINE,
+        .class_init    = aspeed_machine_onyx_class_init,
 #ifdef TARGET_AARCH64
     }, {
         .name          = MACHINE_TYPE_NAME("ast2700-evb"),
