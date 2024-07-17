@@ -38,6 +38,7 @@ AST2600 SoC based machines :
 - ``fby35-bmc``            Facebook fby35 BMC
 - ``qcom-dc-scm-v1-bmc``   Qualcomm DC-SCM V1 BMC
 - ``qcom-firework-bmc``    Qualcomm Firework BMC
+- ``hawaii-bmc``           AMD Hawaii BMC (Cortex-A7)
 
 AST2700 SoC based machines :
 
