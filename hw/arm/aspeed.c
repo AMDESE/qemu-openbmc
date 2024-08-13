@@ -1689,6 +1689,29 @@ static void ast2700_evb_i2c_init(AspeedMachineState *bmc)
                             TYPE_TMP105, 0x4d);
 }
 
+static void marley_bmc_i2c_init(AspeedMachineState *bmc)
+{
+    AspeedSoCState *soc = bmc->soc;
+    I2CSlave *i2c_switch;
+
+    /* Bus 7 */
+    at24c_eeprom_init(aspeed_i2c_get_bus(&soc->i2c, 7), 0x50, 32768);
+
+     /* Bus 8 */
+    at24c_eeprom_init(aspeed_i2c_get_bus(&soc->i2c, 8), 0x50, 32768);
+
+    /* Bus 10 */
+    I2CBus *i2c10 = aspeed_i2c_get_bus(&soc->i2c, 10);
+    i2c_switch = i2c_slave_create_simple(i2c10, "pca9548", 0x70);
+    /*Missing model emc2305 using emc1413 */
+    i2c_slave_create_simple(pca954x_i2c_get_bus(i2c_switch, 0), "emc1413", 0x4d);
+    i2c_slave_create_simple(pca954x_i2c_get_bus(i2c_switch, 1), "emc1413", 0x4d);
+    i2c_slave_create_simple(pca954x_i2c_get_bus(i2c_switch, 2), "emc1413", 0x4d);
+    i2c_slave_create_simple(pca954x_i2c_get_bus(i2c_switch, 3), "emc1413", 0x4d);
+    i2c_slave_create_simple(pca954x_i2c_get_bus(i2c_switch, 4), "emc1413", 0x4d);
+
+}
+
 static void aspeed_machine_ast2700_evb_class_init(ObjectClass *oc, void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
@@ -1722,6 +1745,7 @@ static void aspeed_machine_marley_class_init(ObjectClass *oc, void *data)
     amc->num_cs    = 2;
     amc->macs_mask = ASPEED_MAC0_ON | ASPEED_MAC1_ON | ASPEED_MAC2_ON;
     amc->uart_default = ASPEED_DEV_UART12;
+    amc->i2c_init  = marley_bmc_i2c_init;
     mc->default_ram_size = 2 * GiB;
     aspeed_machine_class_init_cpus_defaults(mc);
 }
