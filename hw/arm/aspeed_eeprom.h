@@ -26,4 +26,8 @@ extern const size_t rainier_bb_fruid_len;
 extern const uint8_t rainier_bmc_fruid[];
 extern const size_t rainier_bmc_fruid_len;
 
+extern const uint8_t malta_fruid[];
+extern const size_t malta_fruid_len;
+extern const uint8_t marley_fruid[];
+extern const size_t marley_fruid_len;
 #endif

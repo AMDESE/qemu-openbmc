@@ -1714,6 +1714,32 @@ static void aspeed_machine_onyx_class_init(ObjectClass *oc, void *data)
 }
 
 #ifdef TARGET_AARCH64
+
+static void marley_bmc_i2c_init(AspeedMachineState *bmc)
+{
+    AspeedSoCState *soc = bmc->soc;
+    I2CSlave *i2c_switch;
+
+    /* Bus 7 */
+    // atmel 24c08 model is not working as expected. enable this once
+    // device model support is ready
+
+    /* Bus 8 */
+    at24c_eeprom_init(aspeed_i2c_get_bus(&soc->i2c, 8), 0x50, 32768);
+    at24c_eeprom_init_rom(aspeed_i2c_get_bus(&soc->i2c, 8), 0x50,
+                          32 * KiB, marley_fruid, marley_fruid_len);
+
+    /* Bus 10 */
+    I2CBus *i2c10 = aspeed_i2c_get_bus(&soc->i2c, 10);
+    i2c_switch = i2c_slave_create_simple(i2c10, "pca9548", 0x70);
+    /*Missing model emc2305 using emc1413 */
+    i2c_slave_create_simple(pca954x_i2c_get_bus(i2c_switch, 0), "emc1413", 0x4d);
+    i2c_slave_create_simple(pca954x_i2c_get_bus(i2c_switch, 1), "emc1413", 0x4d);
+    i2c_slave_create_simple(pca954x_i2c_get_bus(i2c_switch, 2), "emc1413", 0x4d);
+    i2c_slave_create_simple(pca954x_i2c_get_bus(i2c_switch, 3), "emc1413", 0x4d);
+    i2c_slave_create_simple(pca954x_i2c_get_bus(i2c_switch, 4), "emc1413", 0x4d);
+}
+
 static void ast2700_evb_i2c_init(AspeedMachineState *bmc)
 {
     AspeedSoCState *soc = bmc->soc;
