@@ -35,4 +35,6 @@ extern const uint8_t marley_fruid[];
 extern const size_t marley_fruid_len;
 extern const uint8_t congo_fruid[];
 extern const size_t congo_fruid_len;
+extern const uint8_t morocco_fruid[];
+extern const size_t morocco_fruid_len;
 #endif
