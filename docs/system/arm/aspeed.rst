@@ -45,6 +45,7 @@ AST2700 SoC based machines :
 - ``ast2700-evb``          Aspeed AST2700 Evaluation board (Cortex-A35)
 - ``marley-bmc``           AMD Marley BMC (Cortex-A35)
 - ``congo-bmc``            AMD Congo BMC (Cortex-A35)
+- ``morocco-bmc``          AMD Morocco BMC (Cortex-A35)
 
 Supported devices
 -----------------
