@@ -56,7 +56,7 @@ static const hwaddr aspeed_soc_ast2700_memmap[] = {
     [ASPEED_DEV_ETH2]      =  0x14060000,
     [ASPEED_DEV_ETH3]      =  0x14070000,
     [ASPEED_DEV_EMMC]      =  0x12090000,
-    [ASPEED_DEV_INTC]      =  0x12100000,
+    [ASPEED_DEV_INTC0]     =  0x12100000,
     [ASPEED_DEV_SLI]       =  0x12C17000,
     [ASPEED_DEV_SLIIO]     =  0x14C1E000,
     [ASPEED_GIC_DIST]      =  0x12200000,
@@ -371,7 +371,7 @@ static void aspeed_soc_ast2700_init(Object *obj)
 
     object_initialize_child(obj, "sli", &s->sli, TYPE_ASPEED_2700_SLI);
     object_initialize_child(obj, "sliio", &s->sliio, TYPE_ASPEED_2700_SLIIO);
-    object_initialize_child(obj, "intc", &a->intc, TYPE_ASPEED_2700_INTC);
+    object_initialize_child(obj, "intc", &a->intc, TYPE_ASPEED_2700_INTC0);
 
     snprintf(typename, sizeof(typename), "aspeed.adc-%s", socname);
     object_initialize_child(obj, "adc", &s->adc, typename);
@@ -513,7 +513,7 @@ static void aspeed_soc_ast2700_realize(DeviceState *dev, Error **errp)
     }
 
     aspeed_mmio_map(s, SYS_BUS_DEVICE(&a->intc), 0,
-                    sc->memmap[ASPEED_DEV_INTC]);
+                    sc->memmap[ASPEED_DEV_INTC0]);
 
     /* GICINT orgates -> INTC -> GIC */
     for (i = 0; i < ic->num_ints; i++) {

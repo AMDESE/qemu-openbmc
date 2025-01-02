@@ -14,27 +14,27 @@
 #include "hw/registerfields.h"
 #include "qapi/error.h"
 
-/* INTC Registers */
-REG32(GICINT128_EN,         0x1000)
-REG32(GICINT128_STATUS,     0x1004)
-REG32(GICINT129_EN,         0x1100)
-REG32(GICINT129_STATUS,     0x1104)
-REG32(GICINT130_EN,         0x1200)
-REG32(GICINT130_STATUS,     0x1204)
-REG32(GICINT131_EN,         0x1300)
-REG32(GICINT131_STATUS,     0x1304)
-REG32(GICINT132_EN,         0x1400)
-REG32(GICINT132_STATUS,     0x1404)
-REG32(GICINT133_EN,         0x1500)
-REG32(GICINT133_STATUS,     0x1504)
-REG32(GICINT134_EN,         0x1600)
-REG32(GICINT134_STATUS,     0x1604)
-REG32(GICINT135_EN,         0x1700)
-REG32(GICINT135_STATUS,     0x1704)
-REG32(GICINT136_EN,         0x1800)
-REG32(GICINT136_STATUS,     0x1804)
+/* AST2700 INTC0 Registers */
+REG32(INTC0_GICINT128_EN,         0x1000)
+REG32(INTC0_GICINT128_STATUS,     0x1004)
+REG32(INTC0_GICINT129_EN,         0x1100)
+REG32(INTC0_GICINT129_STATUS,     0x1104)
+REG32(INTC0_GICINT130_EN,         0x1200)
+REG32(INTC0_GICINT130_STATUS,     0x1204)
+REG32(INTC0_GICINT131_EN,         0x1300)
+REG32(INTC0_GICINT131_STATUS,     0x1304)
+REG32(INTC0_GICINT132_EN,         0x1400)
+REG32(INTC0_GICINT132_STATUS,     0x1404)
+REG32(INTC0_GICINT133_EN,         0x1500)
+REG32(INTC0_GICINT133_STATUS,     0x1504)
+REG32(INTC0_GICINT134_EN,         0x1600)
+REG32(INTC0_GICINT134_STATUS,     0x1604)
+REG32(INTC0_GICINT135_EN,         0x1700)
+REG32(INTC0_GICINT135_STATUS,     0x1704)
+REG32(INTC0_GICINT136_EN,         0x1800)
+REG32(INTC0_GICINT136_STATUS,     0x1804)
 
-#define GICINT_STATUS_BASE     R_GICINT128_STATUS
+#define GICINT_STATUS_BASE     R_INTC0_GICINT128_STATUS
 
 static void aspeed_intc_update(AspeedINTCState *s, int irq, int level)
 {
@@ -153,15 +153,15 @@ static void aspeed_intc_write(void *opaque, hwaddr offset, uint64_t data,
     trace_aspeed_intc_write(offset, size, data);
 
     switch (addr) {
-    case R_GICINT128_EN:
-    case R_GICINT129_EN:
-    case R_GICINT130_EN:
-    case R_GICINT131_EN:
-    case R_GICINT132_EN:
-    case R_GICINT133_EN:
-    case R_GICINT134_EN:
-    case R_GICINT135_EN:
-    case R_GICINT136_EN:
+    case R_INTC0_GICINT128_EN:
+    case R_INTC0_GICINT129_EN:
+    case R_INTC0_GICINT130_EN:
+    case R_INTC0_GICINT131_EN:
+    case R_INTC0_GICINT132_EN:
+    case R_INTC0_GICINT133_EN:
+    case R_INTC0_GICINT134_EN:
+    case R_INTC0_GICINT135_EN:
+    case R_INTC0_GICINT136_EN:
         irq = (offset & 0x0f00) >> 8;
 
         if (irq >= aic->num_ints) {
@@ -202,15 +202,15 @@ static void aspeed_intc_write(void *opaque, hwaddr offset, uint64_t data,
         }
         s->regs[addr] = data;
         break;
-    case R_GICINT128_STATUS:
-    case R_GICINT129_STATUS:
-    case R_GICINT130_STATUS:
-    case R_GICINT131_STATUS:
-    case R_GICINT132_STATUS:
-    case R_GICINT133_STATUS:
-    case R_GICINT134_STATUS:
-    case R_GICINT135_STATUS:
-    case R_GICINT136_STATUS:
+    case R_INTC0_GICINT128_STATUS:
+    case R_INTC0_GICINT129_STATUS:
+    case R_INTC0_GICINT130_STATUS:
+    case R_INTC0_GICINT131_STATUS:
+    case R_INTC0_GICINT132_STATUS:
+    case R_INTC0_GICINT133_STATUS:
+    case R_INTC0_GICINT134_STATUS:
+    case R_INTC0_GICINT135_STATUS:
+    case R_INTC0_GICINT136_STATUS:
         irq = (offset & 0x0f00) >> 8;
 
         if (irq >= aic->num_ints) {
@@ -336,26 +336,26 @@ static const TypeInfo aspeed_intc_info = {
     .abstract = true,
 };
 
-static void aspeed_2700_intc_class_init(ObjectClass *klass, void *data)
+static void aspeed_2700_intc0_class_init(ObjectClass *klass, void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     AspeedINTCClass *aic = ASPEED_INTC_CLASS(klass);
 
-    dc->desc = "ASPEED 2700 INTC Controller";
+    dc->desc = "ASPEED 2700 INTC 0 Controller";
     aic->num_lines = 32;
     aic->num_ints = 9;
 }
 
-static const TypeInfo aspeed_2700_intc_info = {
-    .name = TYPE_ASPEED_2700_INTC,
+static const TypeInfo aspeed_2700_intc0_info = {
+    .name = TYPE_ASPEED_2700_INTC0,
     .parent = TYPE_ASPEED_INTC,
-    .class_init = aspeed_2700_intc_class_init,
+    .class_init = aspeed_2700_intc0_class_init,
 };
 
 static void aspeed_intc_register_types(void)
 {
     type_register_static(&aspeed_intc_info);
-    type_register_static(&aspeed_2700_intc_info);
+    type_register_static(&aspeed_2700_intc0_info);
 }
 
 type_init(aspeed_intc_register_types);
