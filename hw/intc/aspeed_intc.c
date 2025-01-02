@@ -114,7 +114,8 @@ static void aspeed_intc_set_irq(void *opaque, int irq, int level)
     }
 }
 
-static uint64_t aspeed_intc_read(void *opaque, hwaddr offset, unsigned int size)
+static uint64_t aspeed_2700_intc0_read(void *opaque, hwaddr offset,
+                                       unsigned int size)
 {
     AspeedINTCState *s = ASPEED_INTC(opaque);
     uint32_t addr = offset >> 2;
@@ -133,8 +134,8 @@ static uint64_t aspeed_intc_read(void *opaque, hwaddr offset, unsigned int size)
     return value;
 }
 
-static void aspeed_intc_write(void *opaque, hwaddr offset, uint64_t data,
-                                        unsigned size)
+static void aspeed_2700_intc0_write(void *opaque, hwaddr offset, uint64_t data,
+                                    unsigned size)
 {
     AspeedINTCState *s = ASPEED_INTC(opaque);
     AspeedINTCClass *aic = ASPEED_INTC_GET_CLASS(s);
@@ -261,8 +262,6 @@ static void aspeed_intc_write(void *opaque, hwaddr offset, uint64_t data,
 }
 
 static const MemoryRegionOps aspeed_intc_ops = {
-    .read = aspeed_intc_read,
-    .write = aspeed_intc_write,
     .endianness = DEVICE_LITTLE_ENDIAN,
     .valid = {
         .min_access_size = 4,
@@ -339,6 +338,16 @@ static const TypeInfo aspeed_intc_info = {
     .abstract = true,
 };
 
+static const MemoryRegionOps aspeed_2700_intc0_ops = {
+    .read = aspeed_2700_intc0_read,
+    .write = aspeed_2700_intc0_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = {
+        .min_access_size = 4,
+        .max_access_size = 4,
+    }
+};
+
 static void aspeed_2700_intc0_class_init(ObjectClass *klass, void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
@@ -347,6 +356,7 @@ static void aspeed_2700_intc0_class_init(ObjectClass *klass, void *data)
     dc->desc = "ASPEED 2700 INTC 0 Controller";
     aic->num_lines = 32;
     aic->num_ints = 9;
+    aic->reg_ops = &aspeed_2700_intc0_ops;
 }
 
 static const TypeInfo aspeed_2700_intc0_info = {
