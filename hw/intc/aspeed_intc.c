@@ -34,20 +34,61 @@ REG32(INTC0_GICINT135_STATUS,     0x1704)
 REG32(INTC0_GICINT136_EN,         0x1800)
 REG32(INTC0_GICINT136_STATUS,     0x1804)
 
-#define GICINT_STATUS_BASE     R_INTC0_GICINT128_STATUS
+static AspeedINTCIRQ aspeed_2700_intc0_irqs[ASPEED_INTC_MAX_INPINS] = {
+    {0, 0, 1, R_INTC0_GICINT128_EN, R_INTC0_GICINT128_STATUS},
+    {1, 1, 1, R_INTC0_GICINT129_EN, R_INTC0_GICINT129_STATUS},
+    {2, 2, 1, R_INTC0_GICINT130_EN, R_INTC0_GICINT130_STATUS},
+    {3, 3, 1, R_INTC0_GICINT131_EN, R_INTC0_GICINT131_STATUS},
+    {4, 4, 1, R_INTC0_GICINT132_EN, R_INTC0_GICINT132_STATUS},
+    {5, 5, 1, R_INTC0_GICINT133_EN, R_INTC0_GICINT133_STATUS},
+    {6, 6, 1, R_INTC0_GICINT134_EN, R_INTC0_GICINT134_STATUS},
+    {7, 7, 1, R_INTC0_GICINT135_EN, R_INTC0_GICINT135_STATUS},
+    {8, 8, 1, R_INTC0_GICINT136_EN, R_INTC0_GICINT136_STATUS},
+};
 
-static void aspeed_intc_update(AspeedINTCState *s, int irq, int level)
+static const AspeedINTCIRQ *aspeed_intc_get_irq(AspeedINTCClass *aic,
+                                                uint32_t addr)
+{
+    int i;
+
+    for (i = 0; i < aic->irq_table_count; i++) {
+        if (aic->irq_table[i].enable_addr == addr ||
+            aic->irq_table[i].status_addr == addr) {
+            return &aic->irq_table[i];
+        }
+    }
+
+    /*
+     * Invalid addr.
+     */
+    g_assert_not_reached();
+}
+
+/*
+ * Update the state of an interrupt controller pin by setting
+ * the specified output pin to the given level.
+ * The input pin index should be between 0 and the number of input pins.
+ * The output pin index should be between 0 and the number of output pins.
+ */
+static void aspeed_intc_update(AspeedINTCState *s, int inpin_idx,
+                               int outpin_idx, int level)
 {
     AspeedINTCClass *aic = ASPEED_INTC_GET_CLASS(s);
 
-    if (irq >= aic->num_ints) {
-        qemu_log_mask(LOG_GUEST_ERROR, "%s: Invalid interrupt number: %d\n",
-                      __func__, irq);
+    if (inpin_idx >= aic->num_inpins) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: Invalid input pin index: %d\n",
+                      __func__, inpin_idx);
         return;
     }
 
-    trace_aspeed_intc_update_irq(irq, level);
-    qemu_set_irq(s->output_pins[irq], level);
+    if (outpin_idx >= aic->num_outpins) {
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: Invalid output pin index: %d\n",
+                      __func__, outpin_idx);
+        return;
+    }
+
+    trace_aspeed_intc_update_irq(inpin_idx, outpin_idx, level);
+    qemu_set_irq(s->output_pins[outpin_idx], level);
 }
 
 /*
@@ -56,30 +97,33 @@ static void aspeed_intc_update(AspeedINTCState *s, int irq, int level)
  * The value of irq should be 0 to num_ints.
  * The irq 0 indicates GICINT128, irq 1 indicates GICINT129 and so on.
  */
-static void aspeed_intc_set_irq(void *opaque, int irq, int level)
+static void aspeed_intc_set_irq(void *opaque, int irq_idx, int level)
 {
     AspeedINTCState *s = (AspeedINTCState *)opaque;
     AspeedINTCClass *aic = ASPEED_INTC_GET_CLASS(s);
-    uint32_t status_addr = GICINT_STATUS_BASE + ((0x100 * irq) >> 2);
+    const AspeedINTCIRQ *irq;
     uint32_t select = 0;
     uint32_t enable;
     int i;
 
-    if (irq >= aic->num_ints) {
-        qemu_log_mask(LOG_GUEST_ERROR, "%s: Invalid interrupt number: %d\n",
-                      __func__, irq);
+    if (irq_idx >= aic->num_inpins) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: Invalid input interrupt number: %d\n",
+                      __func__, irq_idx);
         return;
     }
 
-    trace_aspeed_intc_set_irq(irq, level);
-    enable = s->enable[irq];
+    irq = &aic->irq_table[irq_idx];
+
+    trace_aspeed_intc_set_irq(irq->inpin_idx, level);
+    enable = s->enable[irq->inpin_idx];
 
     if (!level) {
         return;
     }
 
     for (i = 0; i < aic->num_lines; i++) {
-        if (s->orgates[irq].levels[i]) {
+        if (s->orgates[irq->inpin_idx].levels[i]) {
             if (enable & BIT(i)) {
                 select |= BIT(i);
             }
@@ -92,7 +136,7 @@ static void aspeed_intc_set_irq(void *opaque, int irq, int level)
 
     trace_aspeed_intc_select(select);
 
-    if (s->mask[irq] || s->regs[status_addr]) {
+    if (s->mask[irq->inpin_idx] || s->regs[irq->status_addr]) {
         /*
          * a. mask is not 0 means in ISR mode
          * sources interrupt routine are executing.
@@ -101,16 +145,18 @@ static void aspeed_intc_set_irq(void *opaque, int irq, int level)
          *
          * save source interrupt to pending variable.
          */
-        s->pending[irq] |= select;
-        trace_aspeed_intc_pending_irq(irq, s->pending[irq]);
+        s->pending[irq->inpin_idx] |= select;
+        trace_aspeed_intc_pending_irq(irq->inpin_idx,
+                                      s->pending[irq->inpin_idx]);
     } else {
         /*
          * notify firmware which source interrupt are coming
          * by setting status register
          */
-        s->regs[status_addr] = select;
-        trace_aspeed_intc_trigger_irq(irq, s->regs[status_addr]);
-        aspeed_intc_update(s, irq, 1);
+        s->regs[irq->status_addr] = select;
+        trace_aspeed_intc_trigger_irq(irq->inpin_idx, irq->outpin_idx,
+                                      s->regs[irq->status_addr]);
+        aspeed_intc_update(s, irq->inpin_idx, irq->outpin_idx, 1);
     }
 }
 
@@ -118,16 +164,16 @@ static void aspeed_2700_intc_enable_handler(AspeedINTCState *s, uint32_t addr,
                                             uint64_t data)
 {
     AspeedINTCClass *aic = ASPEED_INTC_GET_CLASS(s);
-    uint32_t offset = addr << 2;
+    const AspeedINTCIRQ *irq;
     uint32_t old_enable;
     uint32_t change;
-    uint32_t irq;
 
-    irq = (offset & 0x0f00) >> 8;
+    irq = aspeed_intc_get_irq(aic, addr);
 
-    if (irq >= aic->num_ints) {
-        qemu_log_mask(LOG_GUEST_ERROR, "%s: Invalid interrupt number: %d\n",
-                      __func__, irq);
+    if (irq->inpin_idx >= aic->num_inpins) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: Invalid input pin index number: %d\n",
+                      __func__, irq->inpin_idx);
         return;
     }
 
@@ -138,17 +184,17 @@ static void aspeed_2700_intc_enable_handler(AspeedINTCState *s, uint32_t addr,
      */
 
     /* disable all source interrupt */
-    if (!data && !s->enable[irq]) {
+    if (!data && !s->enable[irq->inpin_idx]) {
         s->regs[addr] = data;
         return;
     }
 
-    old_enable = s->enable[irq];
-    s->enable[irq] |= data;
+    old_enable = s->enable[irq->inpin_idx];
+    s->enable[irq->inpin_idx] |= data;
 
     /* enable new source interrupt */
-    if (old_enable != s->enable[irq]) {
-        trace_aspeed_intc_enable(s->enable[irq]);
+    if (old_enable != s->enable[irq->inpin_idx]) {
+        trace_aspeed_intc_enable(s->enable[irq->inpin_idx]);
         s->regs[addr] = data;
         return;
     }
@@ -156,11 +202,11 @@ static void aspeed_2700_intc_enable_handler(AspeedINTCState *s, uint32_t addr,
     /* mask and unmask source interrupt */
     change = s->regs[addr] ^ data;
     if (change & data) {
-        s->mask[irq] &= ~change;
-        trace_aspeed_intc_unmask(change, s->mask[irq]);
+        s->mask[irq->inpin_idx] &= ~change;
+        trace_aspeed_intc_unmask(change, s->mask[irq->inpin_idx]);
     } else {
-        s->mask[irq] |= change;
-        trace_aspeed_intc_mask(change, s->mask[irq]);
+        s->mask[irq->inpin_idx] |= change;
+        trace_aspeed_intc_mask(change, s->mask[irq->inpin_idx]);
     }
     s->regs[addr] = data;
 }
@@ -169,19 +215,19 @@ static void aspeed_2700_intc_status_handler(AspeedINTCState *s, uint32_t addr,
                                             uint64_t data)
 {
     AspeedINTCClass *aic = ASPEED_INTC_GET_CLASS(s);
-    uint32_t offset = addr << 2;
-    uint32_t irq;
-
-    irq = (offset & 0x0f00) >> 8;
+    const AspeedINTCIRQ *irq;
 
     if (!data) {
         qemu_log_mask(LOG_GUEST_ERROR, "%s: Invalid data 0\n", __func__);
         return;
     }
 
-    if (irq >= aic->num_ints) {
-        qemu_log_mask(LOG_GUEST_ERROR, "%s: Invalid interrupt number: %d\n",
-                      __func__, irq);
+    irq = aspeed_intc_get_irq(aic, addr);
+
+    if (irq->inpin_idx >= aic->num_inpins) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: Invalid input pin index number: %d\n",
+                      __func__, irq->inpin_idx);
         return;
     }
 
@@ -200,21 +246,22 @@ static void aspeed_2700_intc_status_handler(AspeedINTCState *s, uint32_t addr,
 
     /* All source ISR execution are done */
     if (!s->regs[addr]) {
-        trace_aspeed_intc_all_isr_done(irq);
-        if (s->pending[irq]) {
+        trace_aspeed_intc_all_isr_done(irq->inpin_idx);
+        if (s->pending[irq->inpin_idx]) {
             /*
              * handle pending source interrupt
              * notify firmware which source interrupt are pending
              * by setting status register
              */
-            s->regs[addr] = s->pending[irq];
-            s->pending[irq] = 0;
-            trace_aspeed_intc_trigger_irq(irq, s->regs[addr]);
-            aspeed_intc_update(s, irq, 1);
+            s->regs[addr] = s->pending[irq->inpin_idx];
+            s->pending[irq->inpin_idx] = 0;
+            trace_aspeed_intc_trigger_irq(irq->inpin_idx, irq->outpin_idx,
+                                          s->regs[addr]);
+            aspeed_intc_update(s, irq->inpin_idx, irq->outpin_idx, 1);
         } else {
             /* clear irq */
-            trace_aspeed_intc_clear_irq(irq, 0);
-            aspeed_intc_update(s, irq, 0);
+            trace_aspeed_intc_clear_irq(irq->inpin_idx, irq->outpin_idx, 0);
+            aspeed_intc_update(s, irq->inpin_idx, irq->outpin_idx, 0);
         }
     }
 }
@@ -301,8 +348,8 @@ static void aspeed_intc_instance_init(Object *obj)
     AspeedINTCClass *aic = ASPEED_INTC_GET_CLASS(s);
     int i;
 
-    assert(aic->num_ints <= ASPEED_INTC_NR_INTS);
-    for (i = 0; i < aic->num_ints; i++) {
+    assert(aic->num_inpins <= ASPEED_INTC_MAX_INPINS);
+    for (i = 0; i < aic->num_inpins; i++) {
         object_initialize_child(obj, "intc-orgates[*]", &s->orgates[i],
                                 TYPE_OR_IRQ);
         object_property_set_int(OBJECT(&s->orgates[i]), "num-lines",
@@ -337,12 +384,15 @@ static void aspeed_intc_realize(DeviceState *dev, Error **errp)
 
     memory_region_add_subregion(&s->iomem_container, 0x0, &s->iomem);
 
-    qdev_init_gpio_in(dev, aspeed_intc_set_irq, aic->num_ints);
+    qdev_init_gpio_in(dev, aspeed_intc_set_irq, aic->num_inpins);
 
-    for (i = 0; i < aic->num_ints; i++) {
+    for (i = 0; i < aic->num_inpins; i++) {
         if (!qdev_realize(DEVICE(&s->orgates[i]), NULL, errp)) {
             return;
         }
+    }
+
+    for (i = 0; i < aic->num_outpins; i++) {
         sysbus_init_irq(sbd, &s->output_pins[i]);
     }
 }
@@ -387,10 +437,13 @@ static void aspeed_2700_intc0_class_init(ObjectClass *klass, void *data)
 
     dc->desc = "ASPEED 2700 INTC 0 Controller";
     aic->num_lines = 32;
-    aic->num_ints = 9;
+    aic->num_inpins = 9;
+    aic->num_outpins = 9;
     aic->reg_ops = &aspeed_2700_intc0_ops;
     aic->mem_size = 0x4000;
     aic->reg_size = 0x2000;
+    aic->irq_table = aspeed_2700_intc0_irqs;
+    aic->irq_table_count = ARRAY_SIZE(aspeed_2700_intc0_irqs);
 }
 
 static const TypeInfo aspeed_2700_intc0_info = {
