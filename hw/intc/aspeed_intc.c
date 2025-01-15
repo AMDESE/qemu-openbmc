@@ -36,6 +36,20 @@ REG32(INTC0_GICINT136_STATUS,     0x1804)
 REG32(INTC0_GICINT192_201_EN,         0x1B00)
 REG32(INTC0_GICINT192_201_STATUS,     0x1B04)
 
+/* AST2700 INTC1 Registers */
+REG32(INTC1_GICINT192_EN,         0x100)
+REG32(INTC1_GICINT192_STATUS,     0x104)
+REG32(INTC1_GICINT193_EN,         0x110)
+REG32(INTC1_GICINT193_STATUS,     0x114)
+REG32(INTC1_GICINT194_EN,         0x120)
+REG32(INTC1_GICINT194_STATUS,     0x124)
+REG32(INTC1_GICINT195_EN,         0x130)
+REG32(INTC1_GICINT195_STATUS,     0x134)
+REG32(INTC1_GICINT196_EN,         0x140)
+REG32(INTC1_GICINT196_STATUS,     0x144)
+REG32(INTC1_GICINT197_EN,         0x150)
+REG32(INTC1_GICINT197_STATUS,     0x154)
+
 static AspeedINTCIRQ aspeed_2700_intc0_irqs[ASPEED_INTC_MAX_INPINS] = {
     {0, 0, 10, R_INTC0_GICINT192_201_EN, R_INTC0_GICINT192_201_STATUS},
     {1, 10, 1, R_INTC0_GICINT128_EN, R_INTC0_GICINT128_STATUS},
@@ -47,6 +61,15 @@ static AspeedINTCIRQ aspeed_2700_intc0_irqs[ASPEED_INTC_MAX_INPINS] = {
     {7, 16, 1, R_INTC0_GICINT134_EN, R_INTC0_GICINT134_STATUS},
     {8, 17, 1, R_INTC0_GICINT135_EN, R_INTC0_GICINT135_STATUS},
     {9, 18, 1, R_INTC0_GICINT136_EN, R_INTC0_GICINT136_STATUS},
+};
+
+static AspeedINTCIRQ aspeed_2700_intc1_irqs[ASPEED_INTC_MAX_INPINS] = {
+    {0, 0, 1, R_INTC1_GICINT192_EN, R_INTC1_GICINT192_STATUS},
+    {1, 1, 1, R_INTC1_GICINT193_EN, R_INTC1_GICINT193_STATUS},
+    {2, 2, 1, R_INTC1_GICINT194_EN, R_INTC1_GICINT194_STATUS},
+    {3, 3, 1, R_INTC1_GICINT195_EN, R_INTC1_GICINT195_STATUS},
+    {4, 4, 1, R_INTC1_GICINT196_EN, R_INTC1_GICINT196_STATUS},
+    {5, 5, 1, R_INTC1_GICINT197_EN, R_INTC1_GICINT197_STATUS},
 };
 
 static const AspeedINTCIRQ *aspeed_intc_get_irq(AspeedINTCClass *aic,
@@ -453,6 +476,68 @@ static void aspeed_2700_intc0_write(void *opaque, hwaddr offset, uint64_t data,
     return;
 }
 
+static uint64_t aspeed_2700_intc1_read(void *opaque, hwaddr offset,
+                                                 unsigned int size)
+{
+    AspeedINTCState *s = ASPEED_INTC(opaque);
+    AspeedINTCClass *aic = ASPEED_INTC_GET_CLASS(s);
+    uint32_t addr = offset >> 2;
+    uint32_t value = 0;
+
+    if (offset >= aic->reg_size) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: Out-of-bounds read at offset 0x%" HWADDR_PRIx "\n",
+                      __func__, offset);
+        return 0;
+    }
+
+    value = s->regs[addr];
+    trace_aspeed_intc_read(aic->id, offset, size, value);
+
+    return value;
+}
+
+static void aspeed_2700_intc1_write(void *opaque, hwaddr offset, uint64_t data,
+                                      unsigned size)
+{
+    AspeedINTCState *s = ASPEED_INTC(opaque);
+    AspeedINTCClass *aic = ASPEED_INTC_GET_CLASS(s);
+    uint32_t addr = offset >> 2;
+
+    if (offset >= aic->reg_size) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: Out-of-bounds write at offset 0x%" HWADDR_PRIx "\n",
+                      __func__, offset);
+        return;
+    }
+
+    trace_aspeed_intc_write(aic->id, offset, size, data);
+
+    switch (addr) {
+    case R_INTC1_GICINT192_EN:
+    case R_INTC1_GICINT193_EN:
+    case R_INTC1_GICINT194_EN:
+    case R_INTC1_GICINT195_EN:
+    case R_INTC1_GICINT196_EN:
+    case R_INTC1_GICINT197_EN:
+        aspeed_2700_intc_enable_handler(s, addr, data);
+        break;
+    case R_INTC1_GICINT192_STATUS:
+    case R_INTC1_GICINT193_STATUS:
+    case R_INTC1_GICINT194_STATUS:
+    case R_INTC1_GICINT195_STATUS:
+    case R_INTC1_GICINT196_STATUS:
+    case R_INTC1_GICINT197_STATUS:
+        aspeed_2700_intc_status_handler(s, addr, data);
+        break;
+    default:
+        s->regs[addr] = data;
+        break;
+    }
+
+    return;
+}
+
 static const MemoryRegionOps aspeed_intc_ops = {
     .endianness = DEVICE_LITTLE_ENDIAN,
     .valid = {
@@ -572,10 +657,44 @@ static const TypeInfo aspeed_2700_intc0_info = {
     .class_init = aspeed_2700_intc0_class_init,
 };
 
+static const MemoryRegionOps aspeed_2700_intc1_ops = {
+    .read = aspeed_2700_intc1_read,
+    .write = aspeed_2700_intc1_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = {
+        .min_access_size = 4,
+        .max_access_size = 4,
+    }
+};
+
+static void aspeed_2700_intc1_class_init(ObjectClass *klass, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    AspeedINTCClass *aic = ASPEED_INTC_CLASS(klass);
+
+    dc->desc = "ASPEED 2700 INTC 1 Controller";
+    aic->num_lines = 32;
+    aic->num_inpins = 6;
+    aic->num_outpins = 6;
+    aic->mem_size = 0x400;
+    aic->reg_size = 0x3d8;
+    aic->reg_ops = &aspeed_2700_intc1_ops;
+    aic->irq_table = aspeed_2700_intc1_irqs;
+    aic->irq_table_count = ARRAY_SIZE(aspeed_2700_intc1_irqs);
+    aic->id = 1;
+}
+
+static const TypeInfo aspeed_2700_intc1_info = {
+    .name = TYPE_ASPEED_2700_INTC1,
+    .parent = TYPE_ASPEED_INTC,
+    .class_init = aspeed_2700_intc1_class_init,
+};
+
 static void aspeed_intc_register_types(void)
 {
     type_register_static(&aspeed_intc_info);
     type_register_static(&aspeed_2700_intc0_info);
+    type_register_static(&aspeed_2700_intc1_info);
 }
 
 type_init(aspeed_intc_register_types);
