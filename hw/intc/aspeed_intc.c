@@ -90,13 +90,15 @@ static void aspeed_intc_update(AspeedINTCState *s, int inpin_idx,
         return;
     }
 
-    trace_aspeed_intc_update_irq(inpin_idx, outpin_idx, level);
+    trace_aspeed_intc_update_irq(aic->id, inpin_idx, outpin_idx, level);
     qemu_set_irq(s->output_pins[outpin_idx], level);
 }
 
 static void aspeed_intc_set_irq_handler(AspeedINTCState *s,
                             const AspeedINTCIRQ *irq, uint32_t select)
 {
+    AspeedINTCClass *aic = ASPEED_INTC_GET_CLASS(s);
+
     if (s->mask[irq->inpin_idx] || s->regs[irq->status_addr]) {
         /*
          * a. mask is not 0 means in ISR mode
@@ -107,7 +109,7 @@ static void aspeed_intc_set_irq_handler(AspeedINTCState *s,
          * save source interrupt to pending variable.
          */
         s->pending[irq->inpin_idx] |= select;
-        trace_aspeed_intc_pending_irq(irq->inpin_idx,
+        trace_aspeed_intc_pending_irq(aic->id, irq->inpin_idx,
                                       s->pending[irq->inpin_idx]);
     } else {
         /*
@@ -115,7 +117,8 @@ static void aspeed_intc_set_irq_handler(AspeedINTCState *s,
          * by setting status register
          */
         s->regs[irq->status_addr] = select;
-        trace_aspeed_intc_trigger_irq(irq->inpin_idx, irq->outpin_idx,
+        trace_aspeed_intc_trigger_irq(aic->id, irq->inpin_idx,
+                                      irq->outpin_idx,
                                       s->regs[irq->status_addr]);
         aspeed_intc_update(s, irq->inpin_idx, irq->outpin_idx, 1);
     }
@@ -124,6 +127,7 @@ static void aspeed_intc_set_irq_handler(AspeedINTCState *s,
 static void aspeed_intc_set_irq_handler_multi_outpins(AspeedINTCState *s,
                                      const AspeedINTCIRQ *irq, uint32_t select)
 {
+    AspeedINTCClass *aic = ASPEED_INTC_GET_CLASS(s);
     int i;
 
     for (i = 0; i < irq->num_outpins; i++) {
@@ -139,7 +143,7 @@ static void aspeed_intc_set_irq_handler_multi_outpins(AspeedINTCState *s,
                  * save source interrupt to pending bit.
                  */
                  s->pending[irq->inpin_idx] |= BIT(i);
-                 trace_aspeed_intc_pending_irq(irq->inpin_idx,
+                 trace_aspeed_intc_pending_irq(aic->id, irq->inpin_idx,
                                                s->pending[irq->inpin_idx]);
             } else {
                 /*
@@ -147,7 +151,7 @@ static void aspeed_intc_set_irq_handler_multi_outpins(AspeedINTCState *s,
                  * by setting status bit
                  */
                 s->regs[irq->status_addr] |= BIT(i);
-                trace_aspeed_intc_trigger_irq(irq->inpin_idx,
+                trace_aspeed_intc_trigger_irq(aic->id, irq->inpin_idx,
                                               irq->outpin_idx + i,
                                               s->regs[irq->status_addr]);
                 aspeed_intc_update(s, irq->inpin_idx, irq->outpin_idx + i, 1);
@@ -180,7 +184,7 @@ static void aspeed_intc_set_irq(void *opaque, int irq_idx, int level)
 
     irq = &aic->irq_table[irq_idx];
 
-    trace_aspeed_intc_set_irq(irq->inpin_idx, level);
+    trace_aspeed_intc_set_irq(aic->id, irq->inpin_idx, level);
     enable = s->enable[irq->inpin_idx];
 
     if (!level) {
@@ -199,7 +203,7 @@ static void aspeed_intc_set_irq(void *opaque, int irq_idx, int level)
         return;
     }
 
-    trace_aspeed_intc_select(select);
+    trace_aspeed_intc_select(aic->id, select);
 
     if (irq->num_outpins > 1) {
         aspeed_intc_set_irq_handler_multi_outpins(s, irq, select);
@@ -242,7 +246,7 @@ static void aspeed_2700_intc_enable_handler(AspeedINTCState *s, uint32_t addr,
 
     /* enable new source interrupt */
     if (old_enable != s->enable[irq->inpin_idx]) {
-        trace_aspeed_intc_enable(s->enable[irq->inpin_idx]);
+        trace_aspeed_intc_enable(aic->id, s->enable[irq->inpin_idx]);
         s->regs[addr] = data;
         return;
     }
@@ -251,10 +255,10 @@ static void aspeed_2700_intc_enable_handler(AspeedINTCState *s, uint32_t addr,
     change = s->regs[addr] ^ data;
     if (change & data) {
         s->mask[irq->inpin_idx] &= ~change;
-        trace_aspeed_intc_unmask(change, s->mask[irq->inpin_idx]);
+        trace_aspeed_intc_unmask(aic->id, change, s->mask[irq->inpin_idx]);
     } else {
         s->mask[irq->inpin_idx] |= change;
-        trace_aspeed_intc_mask(change, s->mask[irq->inpin_idx]);
+        trace_aspeed_intc_mask(aic->id, change, s->mask[irq->inpin_idx]);
     }
     s->regs[addr] = data;
 }
@@ -294,7 +298,7 @@ static void aspeed_2700_intc_status_handler(AspeedINTCState *s, uint32_t addr,
 
     /* All source ISR execution are done */
     if (!s->regs[addr]) {
-        trace_aspeed_intc_all_isr_done(irq->inpin_idx);
+        trace_aspeed_intc_all_isr_done(aic->id, irq->inpin_idx);
         if (s->pending[irq->inpin_idx]) {
             /*
              * handle pending source interrupt
@@ -303,12 +307,13 @@ static void aspeed_2700_intc_status_handler(AspeedINTCState *s, uint32_t addr,
              */
             s->regs[addr] = s->pending[irq->inpin_idx];
             s->pending[irq->inpin_idx] = 0;
-            trace_aspeed_intc_trigger_irq(irq->inpin_idx, irq->outpin_idx,
-                                          s->regs[addr]);
+            trace_aspeed_intc_trigger_irq(aic->id, irq->inpin_idx,
+                                          irq->outpin_idx, s->regs[addr]);
             aspeed_intc_update(s, irq->inpin_idx, irq->outpin_idx, 1);
         } else {
             /* clear irq */
-            trace_aspeed_intc_clear_irq(irq->inpin_idx, irq->outpin_idx, 0);
+            trace_aspeed_intc_clear_irq(aic->id, irq->inpin_idx,
+                                        irq->outpin_idx, 0);
             aspeed_intc_update(s, irq->inpin_idx, irq->outpin_idx, 0);
         }
     }
@@ -351,7 +356,7 @@ static void aspeed_2700_intc_status_handler_multi_outpins(AspeedINTCState *s,
     for (i = 0; i < irq->num_outpins; i++) {
         /* All source ISR executions are done from a specific bit */
         if (data & BIT(i)) {
-            trace_aspeed_intc_all_isr_done_bit(irq->inpin_idx, i);
+            trace_aspeed_intc_all_isr_done_bit(aic->id, irq->inpin_idx, i);
             if (s->pending[irq->inpin_idx] & BIT(i)) {
                 /*
                  * Handle pending source interrupt.
@@ -360,14 +365,15 @@ static void aspeed_2700_intc_status_handler_multi_outpins(AspeedINTCState *s,
                  */
                 s->regs[addr] |= BIT(i);
                 s->pending[irq->inpin_idx] &= ~BIT(i);
-                trace_aspeed_intc_trigger_irq(irq->inpin_idx,
+                trace_aspeed_intc_trigger_irq(aic->id,
+                                              irq->inpin_idx,
                                               irq->outpin_idx + i,
                                               s->regs[addr]);
                 aspeed_intc_update(s, irq->inpin_idx,
                                    irq->outpin_idx + i, 1);
             } else {
                 /* clear irq for the specific bit */
-                trace_aspeed_intc_clear_irq(irq->inpin_idx,
+                trace_aspeed_intc_clear_irq(aic->id, irq->inpin_idx,
                                             irq->outpin_idx + i, 0);
                 aspeed_intc_update(s, irq->inpin_idx, irq->outpin_idx + i, 0);
             }
@@ -391,7 +397,7 @@ static uint64_t aspeed_2700_intc0_read(void *opaque, hwaddr offset,
     }
 
     value = s->regs[addr];
-    trace_aspeed_intc_read(offset, size, value);
+    trace_aspeed_intc_read(aic->id, offset, size, value);
 
     return value;
 }
@@ -410,7 +416,7 @@ static void aspeed_2700_intc0_write(void *opaque, hwaddr offset, uint64_t data,
         return;
     }
 
-    trace_aspeed_intc_write(offset, size, data);
+    trace_aspeed_intc_write(aic->id, offset, size, data);
 
     switch (addr) {
     case R_INTC0_GICINT128_EN:
@@ -557,6 +563,7 @@ static void aspeed_2700_intc0_class_init(ObjectClass *klass, void *data)
     aic->reg_size = 0x2000;
     aic->irq_table = aspeed_2700_intc0_irqs;
     aic->irq_table_count = ARRAY_SIZE(aspeed_2700_intc0_irqs);
+    aic->id = 0;
 }
 
 static const TypeInfo aspeed_2700_intc0_info = {

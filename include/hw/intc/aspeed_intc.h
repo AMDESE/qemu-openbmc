@@ -56,6 +56,7 @@ struct AspeedINTCClass {
     uint64_t reg_size;
     const AspeedINTCIRQ *irq_table;
     int irq_table_count;
+    int id;
 };
 
 #endif /* ASPEED_INTC_H */
