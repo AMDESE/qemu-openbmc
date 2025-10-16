@@ -1926,7 +1926,7 @@ static void aspeed_minibmc_machine_ast1030_evb_class_init(ObjectClass *oc,
     aspeed_machine_class_init_cpus_defaults(mc);
 }
 
-static void aspeed_machine_onyx_class_init(ObjectClass *oc, void *data)
+static void aspeed_machine_onyx_class_init(ObjectClass *oc, const void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
     AspeedMachineClass *amc = ASPEED_MACHINE_CLASS(oc);
@@ -2071,7 +2071,7 @@ static void aspeed_machine_ast2700a1_evb_class_init(ObjectClass *oc,
     aspeed_machine_class_init_cpus_defaults(mc);
 }
 
-static void aspeed_machine_marley_class_init(ObjectClass *oc, void *data)
+static void aspeed_machine_marley_class_init(ObjectClass *oc, const void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
     AspeedMachineClass *amc = ASPEED_MACHINE_CLASS(oc);
@@ -2090,7 +2090,7 @@ static void aspeed_machine_marley_class_init(ObjectClass *oc, void *data)
     aspeed_machine_class_init_cpus_defaults(mc);
 }
 
-static void aspeed_machine_congo_class_init(ObjectClass *oc, void *data)
+static void aspeed_machine_congo_class_init(ObjectClass *oc, const void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
     AspeedMachineClass *amc = ASPEED_MACHINE_CLASS(oc);
@@ -2109,7 +2109,7 @@ static void aspeed_machine_congo_class_init(ObjectClass *oc, void *data)
     aspeed_machine_class_init_cpus_defaults(mc);
 }
 
-static void aspeed_machine_morocco_class_init(ObjectClass *oc, void *data)
+static void aspeed_machine_morocco_class_init(ObjectClass *oc, const void *data)
 {
     MachineClass *mc = MACHINE_CLASS(oc);
     AspeedMachineClass *amc = ASPEED_MACHINE_CLASS(oc);
