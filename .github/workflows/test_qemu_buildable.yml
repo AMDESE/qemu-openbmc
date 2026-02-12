@@ -1,0 +1,53 @@
+name: Test QEMU Buildable
+
+on:
+  push:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-tags: true
+          fetch-depth: 100
+
+      - name: Check git describe after fetching tags
+        run: |
+          git describe --tags --match 'v*'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libglib2.0-dev \
+            pkg-config \
+            flex \
+            bison \
+            libslirp-dev \
+            python3-venv
+
+      - name: Set up Python virtual environment and install dependencies
+        run: |
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install sphinx sphinx_rtd_theme ninja
+
+      - name: Configure QEMU
+        run: |
+          source venv/bin/activate
+          mkdir -p build
+          cd build
+          ../configure
+
+      - name: Build QEMU
+        working-directory: build
+        run: |
+          source ../venv/bin/activate
+          make -j$(nproc)
+
+      - name: Check QEMU version
+        working-directory: build
+        run: ./qemu-system-aarch64 --version
