@@ -5,8 +5,7 @@ on:
 
 jobs:
   build:
-    runs-on:
-      group: Ubuntu24_8CPU_16GB
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
