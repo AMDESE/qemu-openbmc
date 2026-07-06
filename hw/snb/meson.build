@@ -6,3 +6,7 @@ system_ss.add(when: 'CONFIG_SNB', if_true: files(
   'snb-transport.c',
 ))
 system_ss.add(when: 'CONFIG_SNB_I2C_BRIDGE', if_true: files('snb-i2c-bridge.c'))
+system_ss.add(when: 'CONFIG_SNB_I3C_BRIDGE', if_true: files(
+  'snb-i3c-bridge.c',
+  'snb-i3c-target.c',
+))

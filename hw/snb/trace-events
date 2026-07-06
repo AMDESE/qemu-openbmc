@@ -23,3 +23,17 @@ snb_bus_register(const char *name, uint32_t bus_class, uint8_t endpoint, bool ok
 snb_i2c_write(uint8_t addr, uint32_t len, bool stop, bool ok) "addr 0x%02x len %u stop %d: %d"
 snb_i2c_read(uint8_t addr, uint32_t len, bool ok) "addr 0x%02x len %u: %d"
 snb_i2c_gpio_set(const char *name, uint8_t level) "%s = %u"
+
+# snb-i3c-bridge.c
+snb_i3c_ibi(uint8_t da, uint8_t mdb, bool has_mdb) "da 0x%02x mdb 0x%02x (%d)"
+snb_i3c_enum_i3c(unsigned count) "%u I3C targets"
+snb_i3c_enum_i2c(unsigned count) "%u I2C targets"
+snb_i3c_pid_update(uint8_t sa, uint64_t old_pid, uint64_t new_pid) "static address 0x%02x: PID 0x%012" PRIx64 " -> 0x%012" PRIx64
+
+# snb-i3c-target.c
+snb_i3c_da_assigned(uint64_t pid, uint8_t da, bool ok) "PID 0x%012" PRIx64 " da 0x%02x: %d"
+snb_i3c_write(uint8_t da, uint32_t len, bool ok) "da 0x%02x len %u: %d"
+snb_i3c_read(uint8_t da, uint32_t len, uint32_t actual, bool ok) "da 0x%02x len %u actual %u: %d"
+snb_i3c_ccc(uint8_t ccc, bool rnw, uint8_t da, uint32_t len, bool ok) "ccc 0x%02x rnw %d da 0x%02x len %u: %d"
+snb_i3c_i2c_write(uint8_t addr, uint32_t len, bool ok) "addr 0x%02x len %u: %d"
+snb_i3c_i2c_read(uint8_t addr, bool ok) "addr 0x%02x: %d"
