@@ -19,3 +19,8 @@ config MIPI_I3C_HCI
     # instantiated on its own; selected by concrete HCI implementations.
     bool
     select I3C
+
+config ASPEED_I3C_HCI
+    # ASPEED AST2700 I3C HCI: a MIPI HCI with ASPEED INHOUSE/PHY regions.
+    bool
+    select MIPI_I3C_HCI
