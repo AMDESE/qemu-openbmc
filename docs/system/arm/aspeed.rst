@@ -328,6 +328,7 @@ Supported devices
  * eMMC Boot Controller (dummy)
  * PECI Controller (minimal)
  * I3C Controller
+ * LTPI GPIO Controller
  * Internal Bridge Controller (SLI dummy)
 
 Missing devices
