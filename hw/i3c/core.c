@@ -304,9 +304,14 @@ static int i3c_target_handle_ccc_write(I3CTarget *t, const uint8_t *data,
         t->address = 0;
         break;
     case I3C_CCCD_SETNEWDA:
-        /* If this isn't the CCC byte, it's our new address. */
+        /*
+         * If this isn't the CCC byte, it's our new address. The SETNEWDA
+         * data byte carries the dynamic address in bits [7:1] with the
+         * parity T-bit in bit [0], so shift right by one to recover the
+         * 7-bit address.
+         */
         if (*num_sent == 0) {
-            t->address = *data;
+            t->address = *data >> 1;
             *num_sent = 1;
         }
         break;
