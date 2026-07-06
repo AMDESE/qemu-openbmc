@@ -89,7 +89,9 @@ static const hwaddr aspeed_soc_ast2700_memmap[] = {
     [ASPEED_DEV_UART11]    =  0x14C33A00,
     [ASPEED_DEV_UART12]    =  0x14C33B00,
     [ASPEED_DEV_LTPI_CTRL1] =  0x14C34000,
+    [ASPEED_DEV_LTPI_GPIO0] =  0x14C34C00,
     [ASPEED_DEV_LTPI_CTRL2] =  0x14C35000,
+    [ASPEED_DEV_LTPI_GPIO1] =  0x14C35C00,
     [ASPEED_DEV_WDT]       =  0x14C37000,
     [ASPEED_DEV_LTPI_IO0]  =  0x30000000,
     [ASPEED_DEV_IOEXP0_INTCIO] = 0x30C18000,
@@ -129,6 +131,8 @@ static const int aspeed_soc_ast2700a1_irqmap[] = {
     [ASPEED_DEV_LPC]       = 192,
     [ASPEED_DEV_IBT]       = 192,
     [ASPEED_DEV_KCS]       = 192,
+    [ASPEED_DEV_LTPI_GPIO0] = 192,
+    [ASPEED_DEV_LTPI_GPIO1] = 193,
     [ASPEED_DEV_I2C]       = 194,
     [ASPEED_DEV_ADC]       = 194,
     [ASPEED_DEV_GPIO]      = 194,
@@ -169,9 +173,13 @@ static const int ast2700_gic192_intcmap[] = {
     [ASPEED_DEV_LPC]       = 0,
     [ASPEED_DEV_IBT]       = 2,
     [ASPEED_DEV_KCS]       = 4,
+    [ASPEED_DEV_LTPI_GPIO0] = 22,
 };
 
 /* GICINT 193 */
+static const int ast2700_gic193_intcmap[] = {
+    [ASPEED_DEV_LTPI_GPIO1] = 22,
+};
 
 /* GICINT 194 */
 static const int ast2700_gic194_intcmap[] = {
@@ -252,7 +260,7 @@ struct gic_intc_irq_info {
 
 static const struct gic_intc_irq_info ast2700_gic_intcmap[] = {
     {192, 1, 0, ast2700_gic192_intcmap},
-    {193, 1, 1, NULL},
+    {193, 1, 1, ast2700_gic193_intcmap},
     {194, 1, 2, ast2700_gic194_intcmap},
     {195, 1, 3, ast2700_gic195_intcmap},
     {196, 1, 4, ast2700_gic196_intcmap},
@@ -542,6 +550,8 @@ static void aspeed_soc_ast2700_init(Object *obj)
     for (i = 0; i < ASPEED_IOEXP_NUM; i++) {
         object_initialize_child(obj, "ltpi-ctrl[*]",
                                 &s->ltpi_ctrl[i], TYPE_ASPEED_LTPI);
+        object_initialize_child(obj, "ltpi-gpio[*]",
+                                &a->ltpi_gpio[i], TYPE_ASPEED_LTPI_GPIO);
     }
 
     for (i = 0; i < sc->ioexp_num; i++) {
@@ -1073,6 +1083,18 @@ static void aspeed_soc_ast2700_realize(DeviceState *dev, Error **errp)
             return;
         }
         aspeed_mmio_map(s->memory, SYS_BUS_DEVICE(ltpi_ctrl), 0, ltpi_base);
+    }
+
+    /* LTPI GPIO controllers, one per LTPI link */
+    for (i = 0; i < ASPEED_IOEXP_NUM; i++) {
+        SysBusDevice *gpio = SYS_BUS_DEVICE(&a->ltpi_gpio[i]);
+        int gpio_dev = ASPEED_DEV_LTPI_GPIO0 + i;
+
+        if (!sysbus_realize(gpio, errp)) {
+            return;
+        }
+        aspeed_mmio_map(s->memory, gpio, 0, sc->memmap[gpio_dev]);
+        sysbus_connect_irq(gpio, 0, aspeed_soc_ast2700_get_irq(s, gpio_dev));
     }
 
     /* IO Expander */

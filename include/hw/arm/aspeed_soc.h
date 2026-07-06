@@ -35,6 +35,7 @@
 #include "target/arm/cpu.h"
 #include "hw/gpio/aspeed_gpio.h"
 #include "hw/gpio/aspeed_sgpio.h"
+#include "hw/gpio/aspeed_ltpi_gpio.h"
 #include "hw/sd/aspeed_sdhci.h"
 #include "hw/usb/hcd-ehci.h"
 #include "qom/object.h"
@@ -153,6 +154,7 @@ struct Aspeed27x0SoCState {
     GICv3State gic;
     MemoryRegion dram_empty;
     AspeedI3CHCIState i3c_hci;
+    AspeedLtpiGpioState ltpi_gpio[ASPEED_IOEXP_NUM];
 };
 
 #define TYPE_ASPEED27X0_SOC "aspeed27x0-soc"
@@ -292,6 +294,8 @@ enum {
     ASPEED_DEV_LTPI_CTRL2,
     ASPEED_DEV_LTPI_IO0,
     ASPEED_DEV_LTPI_IO1,
+    ASPEED_DEV_LTPI_GPIO0,
+    ASPEED_DEV_LTPI_GPIO1,
     ASPEED_DEV_IOEXP0_I2C,
     ASPEED_DEV_IOEXP1_I2C,
     ASPEED_DEV_IOEXP0_INTCIO,
