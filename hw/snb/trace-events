@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# See docs/devel/tracing.rst for syntax documentation.
+
+# snb-channel.c
+snb_tx(const char *chan, uint32_t id, uint32_t type, uint32_t flags, size_t len) "%s channel: id %u type 0x%x flags 0x%x, %zu bytes"
+snb_rx(const char *chan, uint32_t id, uint32_t type, uint32_t flags, uint32_t size) "%s channel: id %u type 0x%x flags 0x%x, payload %u bytes"
+snb_resync(const char *chan, size_t skipped) "%s channel: skipped %zu bytes to the next packet"
+snb_rpc_drop(uint32_t id, uint32_t type) "response %u (type 0x%x) has no request waiting"
+snb_rpc_deadline(uint32_t id, uint32_t type) "request %u missed its deadline waiting for type 0x%x"
+snb_rpc_hold(uint32_t id, uint32_t type, int64_t waited_ms) "request %u (type 0x%x) waited %" PRId64 " ms: guest clock held"
+snb_rpc_release(uint32_t id, bool done, int64_t held_ms) "request %u done %d: guest clock released after %" PRId64 " ms"
+snb_link_lost(const char *chan, int err) "%s channel: link lost (%d)"
+snb_connect_wait(const char *chan, const char *addr, unsigned retries) "%s channel: waiting for the peer on %s (attempt %u)"
+snb_connected(const char *chan, const char *addr) "%s channel: connected to %s"
+snb_disconnected(const char *chan) "%s channel: disconnected"
+snb_hello(const char *chan, unsigned major, unsigned minor) "%s channel: peer version %u.%u"
+
+# snb-server.c
+snb_bus_register(const char *name, uint32_t bus_class, uint8_t endpoint, bool ok) "bus '%s' class %u endpoint %u: %d"

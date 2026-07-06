@@ -3682,6 +3682,7 @@ if have_system
     'hw/sd',
     'hw/sensor',
     'hw/sh4',
+    'hw/snb',
     'hw/sparc',
     'hw/sparc64',
     'hw/ssi',
