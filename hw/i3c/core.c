@@ -374,8 +374,15 @@ int i3c_send(I3CBus *bus, const uint8_t *data, uint32_t num_to_send,
                 continue;
             }
             ret = i3c_target_handle_ccc_write(t, data, num_to_send, num_sent);
-            /* Targets should only NACK on a direct CCC. */
-            if (ret && !CCC_IS_DIRECT(bus->ccc)) {
+            /*
+             * A target may only NACK during the directed phase of a directed
+             * CCC (after a restart to the target's dynamic address). During
+             * the broadcast prefix phase (bus->broadcast, address 0x7E) every
+             * device silently receives the CCC code and must not NACK, and a
+             * pure broadcast CCC (not CCC_IS_DIRECT) never NACKs either. Drop
+             * the error in those cases.
+             */
+            if (ret && (!CCC_IS_DIRECT(bus->ccc) || bus->broadcast)) {
                 ret = 0;
             }
         } else {
