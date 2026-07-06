@@ -113,6 +113,7 @@ bool i3c_scan_bus(I3CBus *bus, uint8_t address, enum I3CEvent event)
 {
     BusChild *child;
     I3CNode *node, *next;
+    bool any_matched = false;
 
     /* Clear out any devices from a previous (re-)START. */
     QLIST_FOREACH_SAFE(node, &bus->current_devs, next, next) {
@@ -125,12 +126,21 @@ bool i3c_scan_bus(I3CBus *bus, uint8_t address, enum I3CEvent event)
         I3CTarget *target = I3C_TARGET(qdev);
 
         if (i3c_target_match_and_add(bus, target, address, event)) {
-            return true;
+            any_matched = true;
+            /*
+             * For a directed (non-broadcast) address at most one target can
+             * match, so short-circuit.  For the broadcast address 0x7E
+             * (CCC / ENTDAA) every matching target must be enrolled so that
+             * a subsequent i3c_send() delivers the CCC byte to all of them,
+             * not just the first child in list order.
+             */
+            if (address != I3C_BROADCAST) {
+                return true;
+            }
         }
     }
 
-    /* No one on the bus could respond. */
-    return false;
+    return any_matched;
 }
 
 /* Class-level event handling, since we do some CCCs at the class level. */
