@@ -165,6 +165,7 @@ I3CBus *aspeed_i3c_get_bus(AspeedI3CState *s, uint8_t bus_num)
 static void aspeed_i3c_reset(DeviceState *dev)
 {
     AspeedI3CState *s = ASPEED_I3C(dev);
+    trace_aspeed_i3c_reset();
     memset(s->regs, 0, sizeof(s->regs));
 }
 
