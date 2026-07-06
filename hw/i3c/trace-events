@@ -37,6 +37,22 @@ legacy_i2c_send(uint8_t byte) "Legacy I2C send 0x%" PRIx8
 legacy_i2c_start_transfer(uint8_t address, bool is_recv) "Legacy I2C START with address 0x%" PRIx8 " is_recv=%d"
 legacy_i2c_end_transfer(void) "Legacy I2C STOP"
 
+# mipi_i3c_hci.c
+mipi_i3c_hci_read(uint8_t ctrl, uint64_t offset, uint32_t value) "i3c%u: read offset 0x%03" PRIx64 " value 0x%08" PRIx32
+mipi_i3c_hci_write(uint8_t ctrl, uint64_t offset, uint32_t value) "i3c%u: write offset 0x%03" PRIx64 " value 0x%08" PRIx32
+mipi_i3c_hci_rstdaa(uint8_t ctrl) "i3c%u: RSTDAA cleared the DAT and DCT"
+mipi_i3c_hci_cmd(uint8_t ctrl, uint8_t attr, uint8_t tid, uint8_t dev_idx, bool rnw, uint32_t len) "i3c%u: cmd attr 0x%x tid %u dev_idx 0x%02x rnw %d len %" PRIu32
+mipi_i3c_hci_cmd_done(uint8_t ctrl, uint8_t attr, uint8_t tid, bool ok, uint32_t actual_len) "i3c%u: cmd done attr 0x%x tid %u ok %d len %" PRIu32
+mipi_i3c_hci_ccc(uint8_t ctrl, uint8_t ccc_id, bool rnw, uint8_t dev_idx, bool broadcast, uint32_t len) "i3c%u: CCC 0x%02x rnw %d dev_idx 0x%02x broadcast %d len %" PRIu32
+mipi_i3c_hci_entdaa_start(uint8_t ctrl, uint8_t dev_idx, uint8_t dev_count) "i3c%u: ENTDAA dev_idx %u dev_count %u"
+mipi_i3c_hci_entdaa_next(uint8_t ctrl, uint8_t iter, uint8_t da) "i3c%u: ENTDAA device %u address 0x%02x"
+mipi_i3c_hci_entdaa_done(uint8_t ctrl, uint8_t assigned) "i3c%u: ENTDAA no more devices after %u"
+mipi_i3c_hci_ibi(uint8_t ctrl, uint8_t da, uint8_t mdb, bool has_byte, uint32_t desc) "i3c%u: IBI from 0x%02x mdb 0x%02x has_byte %d desc 0x%08" PRIx32
+mipi_i3c_hci_ibi_suppress(uint8_t ctrl, uint8_t da, const char *reason) "i3c%u: IBI from 0x%02x dropped: %s"
+mipi_i3c_hci_irq(uint8_t ctrl, int level, uint32_t status, uint32_t sig_en) "i3c%u: irq %d status 0x%08" PRIx32 " sig_en 0x%08" PRIx32
+mipi_i3c_hci_resp_push(uint8_t ctrl, uint32_t resp) "i3c%u: queue response 0x%08" PRIx32
+mipi_i3c_hci_resp_pop(uint8_t ctrl, uint32_t resp) "i3c%u: read response 0x%08" PRIx32
+
 # mock-target.c
 mock_i3c_target_rx(uint8_t byte) "I3C mock target read 0x%" PRIx8
 mock_i3c_target_tx(uint8_t byte) "I3C mock target write 0x%" PRIx8
