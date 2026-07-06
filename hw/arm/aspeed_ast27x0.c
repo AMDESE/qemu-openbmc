@@ -74,6 +74,7 @@ static const hwaddr aspeed_soc_ast2700_memmap[] = {
     [ASPEED_DEV_INTCIO]    =  0x14C18000,
     [ASPEED_DEV_PCIE_PHY2] =  0x14C1C000,
     [ASPEED_DEV_SLIIO]     =  0x14C1E000,
+    [ASPEED_DEV_I3C]       =  0x14C20000,
     [ASPEED_DEV_VUART]     =  0x14C30000,
     [ASPEED_DEV_UART0]     =  0x14C33000,
     [ASPEED_DEV_UART1]     =  0x14C33100,
@@ -495,6 +496,8 @@ static void aspeed_soc_ast2700_init(Object *obj)
 
     snprintf(typename, sizeof(typename), "aspeed.i2c-%s", socname);
     object_initialize_child(obj, "i2c", &s->i2c, typename);
+
+    object_initialize_child(obj, "i3c-hci", &a->i3c_hci, TYPE_ASPEED_I3C_HCI);
 
     snprintf(typename, sizeof(typename), "aspeed.gpio-%s", socname);
     object_initialize_child(obj, "gpio", &s->gpio, typename);
@@ -968,6 +971,18 @@ static void aspeed_soc_ast2700_realize(DeviceState *dev, Error **errp)
          */
         irq = aspeed_soc_ast2700_get_irq_index(s, ASPEED_DEV_I2C, i);
         sysbus_connect_irq(SYS_BUS_DEVICE(&s->i2c.busses[i]), 0, irq);
+    }
+
+    /* I3C HCI: 16 MIPI I3C HCI controllers */
+    if (!sysbus_realize(SYS_BUS_DEVICE(&a->i3c_hci), errp)) {
+        return;
+    }
+    aspeed_mmio_map(s->memory, SYS_BUS_DEVICE(&a->i3c_hci), 0,
+                    sc->memmap[ASPEED_DEV_I3C]);
+    for (i = 0; i < ASPEED_I3C_HCI_NR_CTRLS; i++) {
+        /* Controller N raises bit N of the I3C OR gate on INTCIO. */
+        irq = aspeed_soc_ast2700_get_irq_index(s, ASPEED_DEV_I3C, i);
+        sysbus_connect_irq(SYS_BUS_DEVICE(&a->i3c_hci.ctrls[i]), 0, irq);
     }
 
     /* GPIO */
