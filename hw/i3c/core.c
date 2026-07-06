@@ -222,41 +222,40 @@ int i3c_start_send(I3CBus *bus, uint8_t address)
 
 void i3c_end_transfer(I3CBus *bus)
 {
+    BusChild *child;
     I3CTargetClass *tc;
     I3CNode *node, *next;
 
     trace_i3c_end_transfer();
 
     /*
-     * If we're in ENTDAA, we need to notify all devices when ENTDAA is done.
-     * This is because everyone initially participates due to the broadcast,
-     * but gradually drops out as they get assigned addresses.
-     * Since the current_devs list only stores who's currently participating,
-     * and not everyone who previously participated, we send the STOP to all
-     * children.
+     * STOP must reach every child on the bus, not just the targets that
+     * happen to be in current_devs at this instant.
+     *
+     * An earlier broadcast phase (ENTDAA, a broadcast CCC, or the broadcast
+     * prefix of a directed CCC) enrols every matching target so they all see
+     * the CCC code byte. A later restart with a directed address re-scans the
+     * bus and replaces current_devs with the smaller set, so targets that
+     * dropped out are removed from current_devs but were never told the
+     * transaction ended. The per-target CCC state (curr_ccc, in_ccc,
+     * ccc_byte_offset) of those targets would otherwise stay stale and
+     * corrupt the next transaction. Delivering STOP to every child resets
+     * that state and is idempotent for targets that were already clean.
      */
-    if (bus->in_entdaa) {
-        BusChild *child;
-
-        QTAILQ_FOREACH(child, &bus->parent_obj.children, sibling) {
-            DeviceState *qdev = child->child;
-            I3CTarget *t = I3C_TARGET(qdev);
-            tc = I3C_TARGET_GET_CLASS(t);
-            if (tc->event) {
-                i3c_target_event(t, I3C_STOP);
-            }
-        }
-    } else {
-        QLIST_FOREACH_SAFE(node, &bus->current_devs, next, next) {
-            I3CTarget *t = node->target;
-            tc = I3C_TARGET_GET_CLASS(t);
-            if (tc->event) {
-                i3c_target_event(t, I3C_STOP);
-            }
-            QLIST_REMOVE(node, next);
-            g_free(node);
+    QTAILQ_FOREACH(child, &bus->parent_obj.children, sibling) {
+        DeviceState *qdev = child->child;
+        I3CTarget *t = I3C_TARGET(qdev);
+        tc = I3C_TARGET_GET_CLASS(t);
+        if (tc->event) {
+            i3c_target_event(t, I3C_STOP);
         }
     }
+
+    QLIST_FOREACH_SAFE(node, &bus->current_devs, next, next) {
+        QLIST_REMOVE(node, next);
+        g_free(node);
+    }
+
     bus->broadcast = false;
     bus->in_entdaa = false;
     bus->in_ccc = false;
