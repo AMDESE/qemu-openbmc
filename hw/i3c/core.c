@@ -413,12 +413,15 @@ static int i3c_target_handle_ccc_read(I3CTarget *t, uint8_t *data,
         } else {
             pid = t->pid;
         }
-        /* Return the 6-byte PID, followed by BCR then DCR. */
+        /*
+         * Return the 6-byte PID followed by BCR then DCR. The PID is
+         * transmitted MSB-first, so emit byte 5 first and byte 0 last.
+         */
         while (t->ccc_byte_offset < 6) {
             if (read_count >= num_to_read) {
                 break;
             }
-            data[read_count] = (pid >> (t->ccc_byte_offset * 8)) & 0xff;
+            data[read_count] = (pid >> ((5 - t->ccc_byte_offset) * 8)) & 0xff;
             t->ccc_byte_offset++;
             read_count++;
         }
@@ -435,11 +438,13 @@ static int i3c_target_handle_ccc_read(I3CTarget *t, uint8_t *data,
         *num_read = read_count;
         break;
     case I3C_CCCD_GETPID:
+        /* The PID is transmitted MSB-first. */
         while (t->ccc_byte_offset < 6) {
             if (read_count >= num_to_read) {
                 break;
             }
-            data[read_count] = (t->pid >> (t->ccc_byte_offset * 8)) & 0xff;
+            data[read_count] =
+                (t->pid >> ((5 - t->ccc_byte_offset) * 8)) & 0xff;
             t->ccc_byte_offset++;
             read_count++;
         }
