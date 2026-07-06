@@ -18,3 +18,8 @@ snb_hello(const char *chan, unsigned major, unsigned minor) "%s channel: peer ve
 
 # snb-server.c
 snb_bus_register(const char *name, uint32_t bus_class, uint8_t endpoint, bool ok) "bus '%s' class %u endpoint %u: %d"
+
+# snb-i2c-bridge.c
+snb_i2c_write(uint8_t addr, uint32_t len, bool stop, bool ok) "addr 0x%02x len %u stop %d: %d"
+snb_i2c_read(uint8_t addr, uint32_t len, bool ok) "addr 0x%02x len %u: %d"
+snb_i2c_gpio_set(const char *name, uint8_t level) "%s = %u"

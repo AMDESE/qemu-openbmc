@@ -3,3 +3,9 @@
 config SNB
     bool
     default y if ASPEED_SOC
+
+config SNB_I2C_BRIDGE
+    bool
+    default y if ASPEED_SOC
+    depends on I2C
+    select SNB
