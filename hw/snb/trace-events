@@ -37,3 +37,7 @@ snb_i3c_read(uint8_t da, uint32_t len, uint32_t actual, bool ok) "da 0x%02x len 
 snb_i3c_ccc(uint8_t ccc, bool rnw, uint8_t da, uint32_t len, bool ok) "ccc 0x%02x rnw %d da 0x%02x len %u: %d"
 snb_i3c_i2c_write(uint8_t addr, uint32_t len, bool ok) "addr 0x%02x len %u: %d"
 snb_i3c_i2c_read(uint8_t addr, bool ok) "addr 0x%02x: %d"
+
+# snb-gpio-bridge.c
+snb_gpio_set(const char *name, uint8_t level, uint32_t pair) "%s = %u (pair %u)"
+snb_gpio_notify(const char *name, uint8_t level, uint32_t pair) "%s = %u (pair %u)"

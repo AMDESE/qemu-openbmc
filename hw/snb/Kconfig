@@ -15,3 +15,9 @@ config SNB_I3C_BRIDGE
     default y if ASPEED_SOC
     depends on I3C
     select SNB
+
+config SNB_GPIO_BRIDGE
+    bool
+    default y if ASPEED_SOC
+    depends on ASPEED_SOC
+    select SNB
