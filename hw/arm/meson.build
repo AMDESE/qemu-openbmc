@@ -74,6 +74,7 @@ arm_common_ss.add(when: ['CONFIG_ASPEED_SOC', 'TARGET_AARCH64'], if_true: files(
   'aspeed_ast27x0.c',
   'aspeed_ast27x0_congo.c',
   'aspeed_ast27x0_evb.c',
+  'aspeed_ast27x0_g406.c',
   'aspeed_ast27x0_marley.c',
   'aspeed_ast27x0_morocco.c',
   'aspeed_ast27x0-fc.c',
