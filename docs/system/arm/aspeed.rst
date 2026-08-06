@@ -289,7 +289,7 @@ AST2700 SoC based machines :
 
 - ``ast2700-evb``          Aspeed AST2700 Evaluation board (Cortex-A35)
 - ``ast2700fc``            Aspeed AST2700 Evaluation board (Cortex-A35 + Cortex-M4)
-- ``malta-bmc``            AMD malta BMC (Cortex-A35)
+- ``marley-bmc``           AMD Marley BMC (Cortex-A35)
 - ``congo-bmc``            AMD Congo BMC (Cortex-A35)
 - ``morocco-bmc``          AMD Morocco BMC (Cortex-A35)
 - ``g406-bmc``             AMD G406 BMC (Cortex-A35)
