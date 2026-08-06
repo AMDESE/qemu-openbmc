@@ -292,6 +292,7 @@ AST2700 SoC based machines :
 - ``malta-bmc``            AMD malta BMC (Cortex-A35)
 - ``congo-bmc``            AMD Congo BMC (Cortex-A35)
 - ``morocco-bmc``          AMD Morocco BMC (Cortex-A35)
+- ``g406-bmc``             AMD G406 BMC (Cortex-A35)
 
 Supported devices
 -----------------
