@@ -189,6 +189,24 @@ struct AspeedMachineState {
 /* Malta hardware value */
 #define MALTA_BMC_HW_STRAP1 AST2700_EVB_HW_STRAP1
 #define MALTA_BMC_HW_STRAP2 AST2700_EVB_HW_STRAP2
+
+/*
+ * AMD BMC target silicon selection for the AST2700 co-image.
+ *
+ * The AMD OpenBMC image is a co-image: the same firmware boots on both
+ * AST2700 A1 and A2 silicon, selecting behaviour at runtime from the SCU
+ * silicon-revision register. The machine names (marley-bmc, congo-bmc,
+ * morocco-bmc, g406-bmc) are identical regardless of the target silicon;
+ * only the emulated SoC revision changes, chosen at build time.
+ *
+ * The revision is selected at configure time and defaults to AST2700 A2:
+ *   ./configure --amd-bmc-soc=ast2700-a1   # build for A1
+ *   ./configure --amd-bmc-soc=ast2700-a2   # build for A2 (default)
+ * CONFIG_AMD_BMC_SOC_NAME is provided by config-host.h (via osdep.h).
+ */
+#ifndef AMD_BMC_SOC_NAME
+#define AMD_BMC_SOC_NAME CONFIG_AMD_BMC_SOC_NAME
+#endif
 #endif
 
 /* Rainier hardware value: (QEMU prototype) */
@@ -2077,7 +2095,7 @@ static void aspeed_machine_marley_class_init(ObjectClass *oc, const void *data)
     AspeedMachineClass *amc = ASPEED_MACHINE_CLASS(oc);
 
     mc->desc = "AMD Marley BMC (Cortex-A35)";
-    amc->soc_name  = "ast2700-a1";
+    amc->soc_name  = AMD_BMC_SOC_NAME;
     amc->hw_strap1 = MALTA_BMC_HW_STRAP1;
     amc->hw_strap2 = MALTA_BMC_HW_STRAP2;
     amc->fmc_model = "w25q01jvq";
@@ -2096,7 +2114,7 @@ static void aspeed_machine_congo_class_init(ObjectClass *oc, const void *data)
     AspeedMachineClass *amc = ASPEED_MACHINE_CLASS(oc);
 
     mc->desc = "AMD Congo BMC (Cortex-A35)";
-    amc->soc_name  = "ast2700-a1";
+    amc->soc_name  = AMD_BMC_SOC_NAME;
     amc->hw_strap1 = MALTA_BMC_HW_STRAP1;
     amc->hw_strap2 = MALTA_BMC_HW_STRAP2;
     amc->fmc_model = "w25q01jvq";
@@ -2115,7 +2133,7 @@ static void aspeed_machine_morocco_class_init(ObjectClass *oc, const void *data)
     AspeedMachineClass *amc = ASPEED_MACHINE_CLASS(oc);
 
     mc->desc = "AMD Morocco BMC (Cortex-A35)";
-    amc->soc_name  = "ast2700-a1";
+    amc->soc_name  = AMD_BMC_SOC_NAME;
     amc->hw_strap1 = MALTA_BMC_HW_STRAP1;
     amc->hw_strap2 = MALTA_BMC_HW_STRAP2;
     amc->fmc_model = "w25q01jvq";
@@ -2134,7 +2152,7 @@ static void aspeed_machine_g406_class_init(ObjectClass *oc, const void *data)
     AspeedMachineClass *amc = ASPEED_MACHINE_CLASS(oc);
 
     mc->desc = "AMD G406 BMC (Cortex-A35)";
-    amc->soc_name  = "ast2700-a1";
+    amc->soc_name  = AMD_BMC_SOC_NAME;
     amc->hw_strap1 = MALTA_BMC_HW_STRAP1;
     amc->hw_strap2 = MALTA_BMC_HW_STRAP2;
     amc->fmc_model = "w25q01jvq";
