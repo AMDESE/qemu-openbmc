@@ -69,7 +69,8 @@ static void aspeed_machine_congo_class_init(ObjectClass *oc, const void *data)
     AspeedMachineClass *amc = ASPEED_MACHINE_CLASS(oc);
 
     mc->desc       = "AMD Congo BMC (Cortex-A35)";
-    amc->soc_name  = "ast2700-a1";
+    mc->alias      = "congo-a2-bmc";
+    amc->soc_name  = "ast2700-a2";
     amc->hw_strap1 = MALTA_BMC_HW_STRAP1;
     amc->hw_strap2 = MALTA_BMC_HW_STRAP2;
     amc->fmc_model = "w25q01jvq";
@@ -82,11 +83,30 @@ static void aspeed_machine_congo_class_init(ObjectClass *oc, const void *data)
     aspeed_machine_class_init_cpus_defaults(mc);
 }
 
+/* The same board with an AST2700 A1 */
+static void aspeed_machine_congo_a1_class_init(ObjectClass *oc,
+                                               const void *data)
+{
+    MachineClass *mc = MACHINE_CLASS(oc);
+    AspeedMachineClass *amc = ASPEED_MACHINE_CLASS(oc);
+
+    aspeed_machine_congo_class_init(oc, data);
+    mc->desc       = "AMD Congo BMC, AST2700 A1 (Cortex-A35)";
+    mc->alias      = NULL;
+    amc->soc_name  = "ast2700-a1";
+}
+
 static const TypeInfo aspeed_ast27x0_congo_types[] = {
     {
         .name          = MACHINE_TYPE_NAME("congo-bmc"),
         .parent        = TYPE_ASPEED_MACHINE,
         .class_init    = aspeed_machine_congo_class_init,
+        .interfaces    = aarch64_machine_interfaces,
+    },
+    {
+        .name          = MACHINE_TYPE_NAME("congo-a1-bmc"),
+        .parent        = TYPE_ASPEED_MACHINE,
+        .class_init    = aspeed_machine_congo_a1_class_init,
         .interfaces    = aarch64_machine_interfaces,
     }
 };
