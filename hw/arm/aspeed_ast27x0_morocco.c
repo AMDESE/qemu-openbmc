@@ -67,7 +67,8 @@ static void aspeed_machine_morocco_class_init(ObjectClass *oc, const void *data)
     AspeedMachineClass *amc = ASPEED_MACHINE_CLASS(oc);
 
     mc->desc       = "AMD Morocco BMC (Cortex-A35)";
-    amc->soc_name  = "ast2700-a1";
+    /* Silicon revision picked at configure time; see --amd-bmc-soc */
+    amc->soc_name  = CONFIG_AMD_BMC_SOC_NAME;
     amc->hw_strap1 = MALTA_BMC_HW_STRAP1;
     amc->hw_strap2 = MALTA_BMC_HW_STRAP2;
     amc->fmc_model = "w25q01jvq";
