@@ -293,6 +293,15 @@ AST2700 SoC based machines :
 - ``congo-bmc``            AMD Congo BMC (Cortex-A35)
 - ``morocco-bmc``          AMD Morocco BMC (Cortex-A35)
 - ``g406-bmc``             AMD G406 BMC (Cortex-A35)
+- ``marley-a1-bmc``        AMD Marley BMC, AST2700 A1 (Cortex-A35)
+- ``congo-a1-bmc``         AMD Congo BMC, AST2700 A1 (Cortex-A35)
+- ``morocco-a1-bmc``       AMD Morocco BMC, AST2700 A1 (Cortex-A35)
+- ``g406-a1-bmc``          AMD G406 BMC, AST2700 A1 (Cortex-A35)
+
+The AMD BMC machines use AST2700 A2; ``marley-a2-bmc``, ``congo-a2-bmc``,
+``morocco-a2-bmc`` and ``g406-a2-bmc`` are aliases of ``marley-bmc``,
+``congo-bmc``, ``morocco-bmc`` and ``g406-bmc``. The ``-a1-bmc`` machines are
+the same boards with AST2700 A1.
 
 Supported devices
 -----------------
