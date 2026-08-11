@@ -2354,6 +2354,7 @@ endif
 config_host_data = configuration_data()
 
 config_host_data.set('CONFIG_HAVE_RUST', have_rust)
+config_host_data.set_quoted('CONFIG_AMD_BMC_SOC_NAME', get_option('amd_bmc_soc'))
 audio_drivers_selected = []
 if have_system
   audio_drivers_available = {

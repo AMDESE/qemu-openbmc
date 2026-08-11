@@ -390,3 +390,7 @@ option('rust', type: 'feature', value: 'disabled',
        description: 'Rust support')
 option('strict_rust_lints', type: 'boolean', value: false,
        description: 'Enable stricter set of Rust warnings')
+
+option('amd_bmc_soc', type: 'combo', choices: ['ast2700-a1', 'ast2700-a2'],
+       value: 'ast2700-a2',
+       description: 'AST2700 silicon revision for AMD BMC machines (co-image)')
