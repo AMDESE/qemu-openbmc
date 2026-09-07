@@ -469,6 +469,7 @@ typedef enum {
     MAN_WINBOND,
     MAN_SST,
     MAN_ISSI,
+    MAN_GIGADEVICE,
     MAN_GENERIC,
 } Manufacturer;
 
@@ -552,6 +553,8 @@ static inline Manufacturer get_man(Flash *s)
         return MAN_SST;
     case 0x9D:
         return MAN_ISSI;
+    case 0xC8:
+        return MAN_GIGADEVICE;
     default:
         return MAN_GENERIC;
     }
@@ -1035,6 +1038,10 @@ static void decode_fast_read_cmd(Flash *s)
          * of dummy cycles, but this is unsupported at the time being.
          */
         s->needed_bytes += 1;
+        break;
+    case MAN_GIGADEVICE:
+        /* Fast Read takes eight dummy cycles, single or four byte address */
+        s->needed_bytes += 8;
         break;
     default:
         break;
