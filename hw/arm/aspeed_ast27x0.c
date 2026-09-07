@@ -63,10 +63,13 @@ static const hwaddr aspeed_soc_ast2700_memmap[] = {
     [ASPEED_DEV_ETH3]      =  0x14070000,
     [ASPEED_DEV_SDHCI]     =  0x14080000,
     [ASPEED_DEV_PCIE2]     =  0x140D0000,
+    [ASPEED_DEV_TAFSC]     =  0x140E0000,
     [ASPEED_DEV_EHCI3]     =  0x14121000,
     [ASPEED_DEV_EHCI4]     =  0x14123000,
     [ASPEED_DEV_ADC]       =  0x14C00000,
     [ASPEED_DEV_SCUIO]     =  0x14C02000,
+    [ASPEED_DEV_ESPI]      =  0x14C05000,
+    [ASPEED_DEV_ESPI1]     =  0x14C06000,
     [ASPEED_DEV_GPIO]      =  0x14C0B000,
     [ASPEED_DEV_SGPIOM0]   =  0x14C0C000,
     [ASPEED_DEV_SGPIOM1]   =  0x14C0D000,
@@ -95,6 +98,8 @@ static const hwaddr aspeed_soc_ast2700_memmap[] = {
     [ASPEED_DEV_LTPI_CTRL2] =  0x14C35000,
     [ASPEED_DEV_LTPI_GPIO1] =  0x14C35C00,
     [ASPEED_DEV_WDT]       =  0x14C37000,
+    [ASPEED_DEV_TAFSB0]    =  0x14C38000,
+    [ASPEED_DEV_TAFSB1]    =  0x14C38200,
     [ASPEED_DEV_LTPI_IO0]  =  0x30000000,
     [ASPEED_DEV_IOEXP0_INTCIO] = 0x30C18000,
     [ASPEED_DEV_LTPI_IO1]  =  0x50000000,
@@ -137,6 +142,8 @@ static const int aspeed_soc_ast2700a1_irqmap[] = {
     [ASPEED_DEV_LTPI_GPIO1] = 193,
     [ASPEED_DEV_UART13]    = 192,
     [ASPEED_DEV_UART14]    = 193,
+    [ASPEED_DEV_ESPI]      = 192,
+    [ASPEED_DEV_ESPI1]     = 193,
     [ASPEED_DEV_I2C]       = 194,
     [ASPEED_DEV_ADC]       = 194,
     [ASPEED_DEV_GPIO]      = 194,
@@ -177,12 +184,14 @@ static const int ast2700_gic192_intcmap[] = {
     [ASPEED_DEV_LPC]       = 0,
     [ASPEED_DEV_IBT]       = 2,
     [ASPEED_DEV_KCS]       = 4,
+    [ASPEED_DEV_ESPI]      = 10,
     [ASPEED_DEV_LTPI_GPIO0] = 22,
     [ASPEED_DEV_UART13]    = 23,
 };
 
 /* GICINT 193 */
 static const int ast2700_gic193_intcmap[] = {
+    [ASPEED_DEV_ESPI1]     = 10,
     [ASPEED_DEV_LTPI_GPIO1] = 22,
     [ASPEED_DEV_UART14]    = 23,
 };
@@ -559,6 +568,13 @@ static void aspeed_soc_ast2700_init(Object *obj)
         object_initialize_child(obj, "ltpi-gpio[*]",
                                 &a->ltpi_gpio[i], TYPE_ASPEED_LTPI_GPIO);
     }
+
+    for (i = 0; i < ASPEED_ESPI_NUM; i++) {
+        object_initialize_child(obj, "espi[*]", &a->espi[i], TYPE_ASPEED_ESPI);
+        object_initialize_child(obj, "tafsb[*]", &a->tafsb[i],
+                                TYPE_ASPEED_TAFSB);
+    }
+    object_initialize_child(obj, "tafsc", &a->tafsc, TYPE_ASPEED_TAFSC);
 
     for (i = 0; i < sc->ioexp_num; i++) {
         /* AST1700 IOEXP */
@@ -1101,6 +1117,48 @@ static void aspeed_soc_ast2700_realize(DeviceState *dev, Error **errp)
         }
         aspeed_mmio_map(s->memory, gpio, 0, sc->memmap[gpio_dev]);
         sysbus_connect_irq(gpio, 0, aspeed_soc_ast2700_get_irq(s, gpio_dev));
+    }
+
+    /*
+     * TAFS/SAFS bridges, one per eSPI controller, and the global controller
+     * they share. They have no interrupt.
+     */
+    if (!sysbus_realize(SYS_BUS_DEVICE(&a->tafsc), errp)) {
+        return;
+    }
+    aspeed_mmio_map(s->memory, SYS_BUS_DEVICE(&a->tafsc), 0,
+                    sc->memmap[ASPEED_DEV_TAFSC]);
+    for (i = 0; i < ASPEED_ESPI_NUM; i++) {
+        SysBusDevice *tafsb = SYS_BUS_DEVICE(&a->tafsb[i]);
+
+        object_property_set_link(OBJECT(tafsb), "ahb", OBJECT(s->memory),
+                                 &error_abort);
+        object_property_set_link(OBJECT(tafsb), "tafsc", OBJECT(&a->tafsc),
+                                 &error_abort);
+        object_property_set_uint(OBJECT(tafsb), "index", i, &error_abort);
+        if (!sysbus_realize(tafsb, errp)) {
+            return;
+        }
+        aspeed_mmio_map(s->memory, tafsb, 0,
+                        sc->memmap[ASPEED_DEV_TAFSB0 + i]);
+    }
+
+    /* eSPI controllers; flash cycles in hardware mode go through a bridge */
+    for (i = 0; i < ASPEED_ESPI_NUM; i++) {
+        SysBusDevice *espi = SYS_BUS_DEVICE(&a->espi[i]);
+        int espi_dev = i ? ASPEED_DEV_ESPI1 : ASPEED_DEV_ESPI;
+
+        object_property_set_int(OBJECT(espi), "dma-base",
+                                sc->memmap[ASPEED_DEV_SDRAM], &error_abort);
+        object_property_set_link(OBJECT(espi), "dma", OBJECT(s->dram_mr),
+                                 &error_abort);
+        object_property_set_link(OBJECT(espi), "tafsb",
+                                 OBJECT(&a->tafsb[i]), &error_abort);
+        if (!sysbus_realize(espi, errp)) {
+            return;
+        }
+        aspeed_mmio_map(s->memory, espi, 0, sc->memmap[espi_dev]);
+        sysbus_connect_irq(espi, 0, aspeed_soc_ast2700_get_irq(s, espi_dev));
     }
 
     /* IO Expander */
