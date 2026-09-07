@@ -21,3 +21,9 @@ config SNB_GPIO_BRIDGE
     default y if ASPEED_SOC
     depends on ASPEED_SOC
     select SNB
+
+config SNB_ESPI_BRIDGE
+    bool
+    default y if ASPEED_SOC
+    depends on ASPEED_SOC
+    select SNB

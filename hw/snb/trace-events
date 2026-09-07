@@ -41,3 +41,15 @@ snb_i3c_i2c_read(uint8_t addr, bool ok) "addr 0x%02x: %d"
 # snb-gpio-bridge.c
 snb_gpio_set(const char *name, uint8_t level, uint32_t pair) "%s = %u (pair %u)"
 snb_gpio_notify(const char *name, uint8_t level, uint32_t pair) "%s = %u (pair %u)"
+
+# snb-espi-bridge.c
+snb_espi_flash_cycle(uint8_t cyc, uint8_t tag, uint32_t addr, uint32_t len, uint8_t rsp_cyc, uint32_t rsp_len, bool ok) "cyc 0x%02x tag %u addr 0x%" PRIx32 " len %u: cyc 0x%02x len %u (%d)"
+snb_espi_flash_completion(uint8_t rsp_cyc, uint32_t rsp_len, bool ok) "cyc 0x%02x len %u (%d)"
+snb_espi_pc_cycle(uint8_t cyc, uint8_t tag, uint64_t addr, uint32_t len, uint8_t rsp_cyc, uint32_t rsp_len, bool ok) "cyc 0x%02x tag %u addr 0x%" PRIx64 " len %u: cyc 0x%02x len %u (%d)"
+snb_espi_vw_set(uint8_t index, uint8_t data) "index %u data 0x%02x"
+snb_espi_reset(bool asserted) "asserted %d"
+snb_espi_get_config(uint16_t addr, uint32_t value) "0x%" PRIx16 " -> 0x%" PRIx32
+snb_espi_set_config(uint16_t addr, uint32_t value) "0x%" PRIx16 " = 0x%" PRIx32
+snb_espi_vw_notify(uint8_t index, uint8_t data) "index %u data 0x%02x"
+snb_espi_alert(uint32_t status) "status 0x%" PRIx32
+snb_espi_pc_notify(uint8_t cyc, uint8_t tag, uint64_t addr, uint32_t len) "cyc 0x%02x tag %u addr 0x%" PRIx64 " len %u"
