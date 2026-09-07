@@ -144,6 +144,7 @@ system_ss.add(when: 'CONFIG_ASPEED_SOC', if_true: files(
   'aspeed_xdma.c',
   'aspeed_peci.c',
   'aspeed_sli.c',
+  'aspeed_tafsb.c',
   'aspeed_tafsc.c'))
 
 system_ss.add(when: 'CONFIG_MSF2', if_true: files('msf2-sysreg.c'))

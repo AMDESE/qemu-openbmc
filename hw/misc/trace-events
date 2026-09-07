@@ -301,6 +301,15 @@ aspeed_pwm_write(uint64_t offset, uint64_t data) "write: offset 0x%" PRIx64 " da
 aspeed_sdmc_write(uint64_t reg, uint64_t data) "reg @0x%" PRIx64 " data: 0x%" PRIx64
 aspeed_sdmc_read(uint64_t reg, uint64_t data) "reg @0x%" PRIx64 " data: 0x%" PRIx64
 
+# aspeed_tafsb.c
+aspeed_tafsb_read(uint64_t offset, uint32_t data) "offset 0x%" PRIx64 " data 0x%" PRIx32
+aspeed_tafsb_write(uint64_t offset, uint32_t data) "offset 0x%" PRIx64 " data 0x%" PRIx32
+aspeed_tafsb_cset(int index, uint32_t opcode, uint32_t clkrate, const char *mode, uint32_t beb, bool ce_stop) "CSET%d opcode 0x%02" PRIx32 " clkrate %" PRIu32 " mode %s beb %" PRIu32 " ce_stop %d"
+aspeed_tafsb_cfg(bool cmd_en, bool cmd_stop) "cmd_en %d cmd_stop %d"
+aspeed_tafsb_ahb_access(uint64_t addr, uint32_t len, bool is_write) "AHB 0x%" PRIx64 " len %" PRIu32 " write %d"
+aspeed_tafsb_spi_cmd(uint32_t opcode, uint32_t addr, uint32_t tx, uint32_t rx, int res) "opcode 0x%02x addr 0x%08x tx %u rx %u res %d"
+aspeed_tafsb_ahb(uint64_t addr, uint32_t len, bool is_write, int res) "AHB 0x%" PRIx64 " len %" PRIu32 " write %d result %d"
+
 # aspeed_peci.c
 aspeed_peci_read(uint64_t offset, uint64_t data) "offset 0x%" PRIx64 " data 0x%" PRIx64
 aspeed_peci_write(uint64_t offset, uint64_t data) "offset 0x%" PRIx64 " data 0x%" PRIx64
