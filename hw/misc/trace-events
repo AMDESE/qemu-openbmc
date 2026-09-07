@@ -301,6 +301,29 @@ aspeed_pwm_write(uint64_t offset, uint64_t data) "write: offset 0x%" PRIx64 " da
 aspeed_sdmc_write(uint64_t reg, uint64_t data) "reg @0x%" PRIx64 " data: 0x%" PRIx64
 aspeed_sdmc_read(uint64_t reg, uint64_t data) "reg @0x%" PRIx64 " data: 0x%" PRIx64
 
+# aspeed_espi.c
+aspeed_espi_read(uint64_t offset, unsigned size, uint32_t data) "offset 0x%" PRIx64 " size %u data 0x%" PRIx32
+aspeed_espi_write(uint64_t offset, unsigned size, uint32_t data) "offset 0x%" PRIx64 " size %u data 0x%" PRIx32
+aspeed_espi_reset(int type) "reset type %d"
+aspeed_espi_status(uint32_t status, uint32_t shadow) "status 0x%" PRIx32 " shadow 0x%" PRIx32
+aspeed_espi_alert(uint32_t shadow, uint32_t status) "alert: shadow 0x%" PRIx32 " -> status 0x%" PRIx32
+aspeed_espi_irq(uint32_t status, uint32_t enable, bool asserted) "int_sts 0x%" PRIx32 " int_en 0x%" PRIx32 " asserted %d"
+aspeed_espi_chan_config(const char *name, uint32_t cfg, bool ready) "%s channel config 0x%" PRIx32 " ready %d"
+aspeed_espi_set_config(uint16_t addr, uint32_t value) "config 0x%" PRIx16 " = 0x%" PRIx32
+aspeed_espi_chan_reset(const char *name) "%s channel reset"
+aspeed_espi_chan_ready(const char *name, bool ready) "%s channel software ready %d"
+aspeed_espi_link_reset(void) "link reset de-asserted, channels torn down"
+aspeed_espi_flash_mode(const char *mode) "flash channel %s mode"
+aspeed_espi_flash_window(uint64_t taddr, uint64_t mask, uint64_t size) "flash window target 0x%" PRIx64 " mask 0x%" PRIx64 " size 0x%" PRIx64
+aspeed_espi_flash_map(uint32_t offset, uint64_t addr) "flash offset 0x%" PRIx32 " -> AHB 0x%" PRIx64
+aspeed_espi_filter_ctrl(const char *type, uint64_t size) "SAFS filter regions %s, shared flash size 0x%" PRIx64
+aspeed_espi_filter_region(unsigned region, uint64_t addr, bool valid, bool rd, bool wr) "SAFS filter region %u start 0x%" PRIx64 " valid %d read %d write %d"
+aspeed_espi_flash_cycle(const char *disposition, uint8_t cyc, uint8_t tag, uint32_t len) "%s: cyc 0x%02x tag %u len %" PRIu32
+aspeed_espi_flash_cpl(uint8_t tag, uint8_t cyc, uint32_t len) "completion tag %u cyc 0x%02x len %" PRIu32
+aspeed_espi_flash_queue_full(uint32_t pending) "non-posted queue full, %" PRIu32 " pending"
+aspeed_espi_flash_rx_serviced(uint32_t pending) "receive descriptor serviced, %" PRIu32 " pending"
+aspeed_espi_vw_event(uint64_t reg, uint32_t old, uint32_t new, uint32_t raised) "vw event reg 0x%" PRIx64 " 0x%" PRIx32 " -> 0x%" PRIx32 " raised 0x%" PRIx32
+
 # aspeed_tafsb.c
 aspeed_tafsb_read(uint64_t offset, uint32_t data) "offset 0x%" PRIx64 " data 0x%" PRIx32
 aspeed_tafsb_write(uint64_t offset, uint32_t data) "offset 0x%" PRIx64 " data 0x%" PRIx32
