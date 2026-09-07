@@ -36,6 +36,9 @@
 #include "hw/gpio/aspeed_gpio.h"
 #include "hw/gpio/aspeed_sgpio.h"
 #include "hw/gpio/aspeed_ltpi_gpio.h"
+#include "hw/misc/aspeed_espi.h"
+#include "hw/misc/aspeed_tafsb.h"
+#include "hw/misc/aspeed_tafsc.h"
 #include "hw/sd/aspeed_sdhci.h"
 #include "hw/usb/hcd-ehci.h"
 #include "qom/object.h"
@@ -62,6 +65,7 @@
 #define ASPEED_PCIE_NUM  3
 #define ASPEED_INTC_NUM  2
 #define ASPEED_IOEXP_NUM 2
+#define ASPEED_ESPI_NUM  2
 
 struct AspeedSoCState {
     DeviceState parent;
@@ -155,6 +159,9 @@ struct Aspeed27x0SoCState {
     MemoryRegion dram_empty;
     AspeedI3CHCIState i3c_hci;
     AspeedLtpiGpioState ltpi_gpio[ASPEED_IOEXP_NUM];
+    AspeedESPIState espi[ASPEED_ESPI_NUM];
+    AspeedTAFSBState tafsb[ASPEED_ESPI_NUM];
+    AspeedTAFSCState tafsc;
 };
 
 #define TYPE_ASPEED27X0_SOC "aspeed27x0-soc"
@@ -297,6 +304,10 @@ enum {
     ASPEED_DEV_LTPI_IO1,
     ASPEED_DEV_LTPI_GPIO0,
     ASPEED_DEV_LTPI_GPIO1,
+    ASPEED_DEV_ESPI1,
+    ASPEED_DEV_TAFSB0,
+    ASPEED_DEV_TAFSB1,
+    ASPEED_DEV_TAFSC,
     ASPEED_DEV_IOEXP0_I2C,
     ASPEED_DEV_IOEXP1_I2C,
     ASPEED_DEV_IOEXP0_INTCIO,
