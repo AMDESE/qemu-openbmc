@@ -171,6 +171,12 @@ static void aspeed_ltpi_gpio_write(void *opaque, hwaddr offset, uint64_t data,
     aspeed_ltpi_gpio_update_irq(s);
 }
 
+bool aspeed_ltpi_gpio_out_level(AspeedLtpiGpioState *s, uint32_t pair)
+{
+    return pair < ASPEED_LTPI_GPIO_NR_PAIRS &&
+           FIELD_EX32(s->ctrl[pair], CTRL, OUT_DATA);
+}
+
 static const MemoryRegionOps aspeed_ltpi_gpio_ops = {
     .read = aspeed_ltpi_gpio_read,
     .write = aspeed_ltpi_gpio_write,

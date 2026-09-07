@@ -30,4 +30,10 @@ struct AspeedLtpiGpioState {
     bool powered;
 };
 
+/*
+ * The level the output line of @pair drives, for a device that has to
+ * report the current outputs rather than only follow the changes.
+ */
+bool aspeed_ltpi_gpio_out_level(AspeedLtpiGpioState *s, uint32_t pair);
+
 #endif /* HW_GPIO_ASPEED_LTPI_GPIO_H */
