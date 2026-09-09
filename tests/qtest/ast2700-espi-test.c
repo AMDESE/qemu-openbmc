@@ -7,6 +7,7 @@
  */
 
 #include "qemu/osdep.h"
+#include "qemu/cutils.h"
 #include "libqtest.h"
 #include "qobject/qdict.h"
 
@@ -124,6 +125,115 @@
 /* FMC configuration: bit 16 lets chip select 0 be written */
 #define FMC_CONF                0x00
 #define FMC_CONF_CE0_WRITE      (1u << 16)
+
+/* Peripheral channel */
+#define ESPI_CH0_INT_STS        0x108
+#define ESPI_CH0_INT_EN         0x10c
+#define ESPI_CH0_PC_RX_DMAL     0x110
+#define ESPI_CH0_PC_RX_CTRL     0x118
+#define ESPI_CH0_PC_RX_DATA     0x11c
+#define ESPI_CH0_PC_TX_CTRL     0x128
+#define ESPI_CH0_PC_TX_DATA     0x12c
+#define ESPI_CH0_NP_TX_CTRL     0x138
+#define ESPI_CH0_NP_TX_DATA     0x13c
+#define ESPI_CH0_MAP0_SRCL      0x140
+#define ESPI_CH0_MAP0_SRCH      0x144
+#define ESPI_CH0_MAP0_TGTL      0x148
+#define ESPI_CH0_MAP0_TGTH      0x14c
+#define ESPI_CH0_MAP0_MASKL     0x150
+#define ESPI_CH0_MAP0_MASKH     0x154
+
+/* The four queue resets, released */
+#define ESPI_CH0_CTRL_RST_ALL   0xf0000000
+#define ESPI_CH0_CTRL_PC_RX_RST (1u << 28)
+#define ESPI_CH0_CTRL_RD_LOCK   (1u << 7)
+#define ESPI_CH0_CTRL_RD_DIS    (1u << 6)
+#define ESPI_CH0_CTRL_WR_LOCK   (1u << 5)
+#define ESPI_CH0_CTRL_WR_DIS    (1u << 4)
+#define ESPI_CH0_CTRL_SW_RDY    (1u << 1)
+#define ESPI_CH0_CTRL_READY     (1u << 0)
+#define ESPI_CH0_INT_PC_TX_ERR  (1u << 4)
+#define ESPI_CH0_INT_PC_TX_CMPLT (1u << 1)
+#define ESPI_CH0_INT_PC_RX_CMPLT (1u << 0)
+#define ESPI_TX_TRIG            (1u << 31)
+
+#define CFG_CH0                 0x10
+#define CFG_CH0_BUS_MASTER_EN   (1u << 2)
+#define STS_PC_FREE             (1u << 0)
+#define STS_NP_FREE             (1u << 1)
+
+/* Peripheral cycle types, and the names the host side gives I/O cycles */
+#define PERIF_MEMRD32           0x00
+#define PERIF_MEMWR32           0x01
+#define PERIF_SUC_CMPLT_D_ONLY  0x0f
+#define PERIF_UNSUC_CMPLT_ONLY  0x0e
+#define PERIF_MSG               0x10
+#define PERIF_MSG_D             0x11
+#define PERIF_MSG_TRIG          0x40
+#define PERIF_MSG_D_TRIG        0x41
+#define PERIF_IORD              0x20
+#define PERIF_IOWR              0x21
+
+/* Memory buffer interface */
+#define ESPI_MMBI_CTRL          0x800
+#define ESPI_MMBI_INT_STS       0x808
+#define ESPI_MMBI_INT_EN        0x80c
+#define ESPI_MMBI_RWP0          0x810
+#define ESPI_MMBI_RWP1          0x814
+
+/* LPC: KCS and Post Code Capture */
+#define AST2700_LPC_BASE        0x14c31000
+#define LPC_HICR0               0x000
+#define LPC_HICR0_LPC3E         (1u << 7)
+#define LPC_HICR0_LPC1E         (1u << 5)
+#define LPC_HICR0_PMEE          (1u << 2)
+#define LPC_HICR1               0x004
+#define LPC_HICR1_PMEB          (1u << 2)
+#define LPC_HICR4               0x010
+#define LPC_HICR4_LADR12AS      (1u << 7)
+#define LPC_HICR4_KCSENBL       (1u << 2)
+#define LPC_LADR3H              0x014
+#define LPC_LADR3L              0x018
+#define LPC_LADR12H             0x01c
+#define LPC_LADR12L             0x020
+#define LPC_IDR1                0x024
+#define LPC_IDR3                0x02c
+#define LPC_ODR3                0x038
+#define LPC_STR1                0x03c
+#define LPC_STR3                0x044
+#define LPC_STR_OBF             (1u << 0)
+#define LPC_STR_IBF             (1u << 1)
+#define LPC_STR_CMD             (1u << 3)
+#define LPC_PCCR4               0x0d0
+#define LPC_PCCR5               0x0d4
+#define LPC_PCCR0               0x130
+#define LPC_PCCR1               0x134
+#define LPC_PCCR2               0x138
+#define LPC_PCCR3               0x13c
+#define LPC_PCCR0_EN            (1u << 0)
+#define LPC_PCCR0_RXAVA_EN      (1u << 1)
+#define LPC_PCCR0_CLR_FIFO      (1u << 7)
+#define LPC_PCCR2_DATA_RDY      (1u << 4)
+#define LPC_PCCR2_RXOVR         (1u << 3)
+#define LPC_PCCR2_RXAVA         (1u << 1)
+
+/* Virtual UART 0, linked into the first eSPI controller */
+#define AST2700_VUART0_BASE     0x14c30000
+#define VUART_THR               0x00
+#define VUART_IER               0x04
+#define VUART_FCR               0x08
+#define VUART_LSR               0x14
+#define VUART_GCRA              0x20
+#define VUART_GCRB              0x24
+#define VUART_ADDRL             0x28
+#define VUART_ADDRH             0x2c
+#define VUART_GCRE              0x30
+#define VUART_GCRF              0x34
+#define VUART_GCRG              0x38
+#define VUART_GCRH              0x3c
+#define VUART_LSR_DR            0x01
+#define VUART_LSR_THRE          0x20
+#define VUART_HOST_PORT         0x3f8
 
 #define HOST_PATH               "/machine/peripheral/host"
 
@@ -846,6 +956,547 @@ static void test_link_reset(void)
     qtest_quit(s);
 }
 
+static uint32_t lpc_readl(QTestState *s, uint32_t off)
+{
+    return qtest_readl(s, AST2700_LPC_BASE + off);
+}
+
+static void lpc_writel(QTestState *s, uint32_t off, uint32_t val)
+{
+    qtest_writel(s, AST2700_LPC_BASE + off, val);
+}
+
+static uint32_t vuart_readl(QTestState *s, uint32_t off)
+{
+    return qtest_readl(s, AST2700_VUART0_BASE + off);
+}
+
+static void vuart_writel(QTestState *s, uint32_t off, uint32_t val)
+{
+    qtest_writel(s, AST2700_VUART0_BASE + off, val);
+}
+
+/* Issue a peripheral cycle from the host; true if the target took it */
+static bool host_perif(QTestState *s, uint8_t cyc, uint64_t addr,
+                       uint32_t len, const char *hex)
+{
+    host_set_int(s, "perif-addr", addr);
+    host_set_int(s, "perif-len", len);
+    if (hex) {
+        host_set_str(s, "flash-data", hex);
+    }
+    host_set_int(s, "perif-cycle", cyc);
+    return host_get_bool(s, "perif-accepted");
+}
+
+static void host_io_write(QTestState *s, uint32_t port, uint8_t byte)
+{
+    g_autofree char *hex = g_strdup_printf("%02x", byte);
+
+    g_assert_true(host_perif(s, PERIF_IOWR, port, 1, hex));
+}
+
+static uint8_t host_io_read(QTestState *s, uint32_t port)
+{
+    g_autofree char *hex = NULL;
+    unsigned long val;
+
+    g_assert_true(host_perif(s, PERIF_IORD, port, 1, NULL));
+    hex = host_get_str(s, "flash-data");
+    g_assert_cmpuint(strlen(hex), ==, 2);
+    g_assert_cmpint(qemu_strtoul(hex, NULL, 16, &val), ==, 0);
+    return val;
+}
+
+/*
+ * Peripheral channel control: the read-only bits keep the reset value, and
+ * bits 7 and 5 are set-only and freeze the memory cycle disables below them.
+ */
+static void test_perif_ctrl(void)
+{
+    QTestState *s = espi_start();
+
+    espi_writel(s, ESPI_CH0_CTRL, 0xffffffff & ~(ESPI_CH0_CTRL_RD_LOCK |
+                                                 ESPI_CH0_CTRL_WR_LOCK));
+    g_assert_cmphex(espi_readl(s, ESPI_CH0_CTRL), ==, 0xf00b8352);
+
+    /* Lock the read disable while set, the write disable while clear */
+    espi_writel(s, ESPI_CH0_CTRL, ESPI_CH0_CTRL_RST_ALL |
+                ESPI_CH0_CTRL_RD_LOCK | ESPI_CH0_CTRL_RD_DIS);
+    espi_writel(s, ESPI_CH0_CTRL, ESPI_CH0_CTRL_RST_ALL |
+                ESPI_CH0_CTRL_WR_LOCK);
+    g_assert_cmphex(espi_readl(s, ESPI_CH0_CTRL), ==,
+                    ESPI_CH0_CTRL_RST_ALL | ESPI_CH0_CTRL_RD_LOCK |
+                    ESPI_CH0_CTRL_RD_DIS | ESPI_CH0_CTRL_WR_LOCK);
+    espi_writel(s, ESPI_CH0_CTRL, ESPI_CH0_CTRL_RST_ALL |
+                ESPI_CH0_CTRL_WR_DIS);
+    g_assert_cmphex(espi_readl(s, ESPI_CH0_CTRL), ==,
+                    ESPI_CH0_CTRL_RST_ALL | ESPI_CH0_CTRL_RD_LOCK |
+                    ESPI_CH0_CTRL_RD_DIS | ESPI_CH0_CTRL_WR_LOCK);
+
+    qtest_quit(s);
+}
+
+/* Reserved bits of the peripheral channel registers read as zero */
+static void test_perif_masks(void)
+{
+    QTestState *s = espi_start();
+
+    espi_writel(s, ESPI_CH0_INT_EN, 0xffffffff);
+    g_assert_cmphex(espi_readl(s, ESPI_CH0_INT_EN), ==, 0x000003ff);
+    espi_writel(s, ESPI_CH0_PC_RX_DMAL, 0xffffffff);
+    g_assert_cmphex(espi_readl(s, ESPI_CH0_PC_RX_DMAL), ==, 0xfffffffc);
+    espi_writel(s, ESPI_CH0_MAP0_SRCL, 0xffffffff);
+    g_assert_cmphex(espi_readl(s, ESPI_CH0_MAP0_SRCL), ==, 0xffff0000);
+    espi_writel(s, ESPI_CH0_MAP0_TGTL, 0xffffffff);
+    g_assert_cmphex(espi_readl(s, ESPI_CH0_MAP0_TGTL), ==, 0xffff0000);
+    espi_writel(s, ESPI_CH0_MAP0_MASKL, 0xffffffff);
+    g_assert_cmphex(espi_readl(s, ESPI_CH0_MAP0_MASKL), ==, 0xffff0001);
+    /* Bus mastering is off, so a trigger only stores the fields */
+    espi_writel(s, ESPI_CH0_NP_TX_CTRL, 0x7fffffff);
+    g_assert_cmphex(espi_readl(s, ESPI_CH0_NP_TX_CTRL), ==, 0x00ffffff);
+
+    qtest_quit(s);
+}
+
+/*
+ * Window 0 maps host memory at 0xfedc0000 onto DRAM. Memory cycles complete
+ * in hardware, so they work before software is ready, unless software
+ * disables them.
+ */
+static void perif_map_window(QTestState *s, uint32_t src, uint64_t tgt,
+                             uint32_t mask)
+{
+    espi_writel(s, ESPI_CH0_MAP0_SRCL, src);
+    espi_writel(s, ESPI_CH0_MAP0_SRCH, 0);
+    espi_writel(s, ESPI_CH0_MAP0_TGTL, (uint32_t)tgt);
+    espi_writel(s, ESPI_CH0_MAP0_TGTH, tgt >> 32);
+    espi_writel(s, ESPI_CH0_MAP0_MASKL, mask | 1);
+    espi_writel(s, ESPI_CH0_MAP0_MASKH, 0xffffffff);
+}
+
+static void test_perif_memory(void)
+{
+    QTestState *s = espi_start_host();
+    uint64_t dram = AST2700_DRAM_BASE + 0x100000;
+    g_autofree char *rd = NULL;
+
+    perif_map_window(s, 0xfedc0000, dram, 0xffff0000);
+
+    /* Both directions come up disabled */
+    g_assert_true(host_perif(s, PERIF_MEMWR32, 0xfedc0104, 4, "11223344"));
+    g_assert_cmphex(qtest_readl(s, dram + 0x104), ==, 0);
+
+    espi_writel(s, ESPI_CH0_CTRL, ESPI_CH0_CTRL_RST_ALL);
+    g_assert_true(host_perif(s, PERIF_MEMWR32, 0xfedc0104, 4, "11223344"));
+    g_assert_cmphex(qtest_readl(s, dram + 0x104), ==, 0x44332211);
+
+    qtest_writel(s, dram + 0x200, 0xa5a55a5a);
+    g_assert_true(host_perif(s, PERIF_MEMRD32, 0xfedc0200, 4, NULL));
+    g_assert_cmphex(host_get_int(s, "flash-rsp-cyc"), ==,
+                    PERIF_SUC_CMPLT_D_ONLY);
+    rd = host_get_str(s, "flash-data");
+    g_assert_cmpstr(rd, ==, "5a5aa5a5");
+
+    /* Outside the window, a read is answered unsuccessfully */
+    g_assert_true(host_perif(s, PERIF_MEMRD32, 0xfedd0000, 4, NULL));
+    g_assert_cmphex(host_get_int(s, "flash-rsp-cyc"), ==,
+                    PERIF_UNSUC_CMPLT_ONLY);
+
+    qtest_quit(s);
+}
+
+/*
+ * A message reaches software through the Posted Rx registers once software
+ * is ready, and holds the queue until software releases it.
+ */
+static void test_perif_message_rx(void)
+{
+    QTestState *s = espi_start_host();
+    uint8_t got[7];
+    int i;
+
+    host_set_int(s, "perif-msg", 0x5a);
+    g_assert_false(host_perif(s, PERIF_MSG_D, 0x04030201, 2, "aabb"));
+
+    espi_writel(s, ESPI_CH0_CTRL, ESPI_CH0_CTRL_RST_ALL |
+                ESPI_CH0_CTRL_SW_RDY);
+    g_assert_true(host_perif(s, PERIF_MSG_D, 0x04030201, 2, "aabb"));
+    g_assert_cmphex(espi_readl(s, ESPI_CH0_INT_STS) &
+                    ESPI_CH0_INT_PC_RX_CMPLT, ==, ESPI_CH0_INT_PC_RX_CMPLT);
+    g_assert_cmphex(espi_readl(s, ESPI_CH0_PC_RX_CTRL), ==,
+                    ESPI_CYC_PEND | (2 << 12) | PERIF_MSG_D);
+
+    /* Message code, the four message specific bytes, then the data */
+    for (i = 0; i < 7; i++) {
+        got[i] = espi_readl(s, ESPI_CH0_PC_RX_DATA);
+    }
+    g_assert_cmphex(got[0], ==, 0x5a);
+    g_assert_cmphex(got[1], ==, 0x01);
+    g_assert_cmphex(got[4], ==, 0x04);
+    g_assert_cmphex(got[5], ==, 0xaa);
+    g_assert_cmphex(got[6], ==, 0xbb);
+
+    /* The queue holds one cycle until software releases it */
+    g_assert_cmphex(host_get_int(s, "status") & STS_PC_FREE, ==, 0);
+    g_assert_false(host_perif(s, PERIF_MSG, 0, 0, NULL));
+    espi_writel(s, ESPI_CH0_PC_RX_CTRL, ESPI_CYC_PEND);
+    g_assert_cmphex(host_get_int(s, "status") & STS_PC_FREE, ==,
+                    STS_PC_FREE);
+
+    qtest_quit(s);
+}
+
+/* Holding the Posted Rx queue in reset and releasing it */
+static void test_perif_rx_reset(void)
+{
+    QTestState *s = espi_start_host();
+
+    espi_writel(s, ESPI_CH0_CTRL, ESPI_CH0_CTRL_RST_ALL |
+                ESPI_CH0_CTRL_SW_RDY);
+    g_assert_cmphex(host_get_int(s, "status") & STS_PC_FREE, ==,
+                    STS_PC_FREE);
+    espi_writel(s, ESPI_CH0_CTRL, (ESPI_CH0_CTRL_RST_ALL &
+                                   ~ESPI_CH0_CTRL_PC_RX_RST) |
+                ESPI_CH0_CTRL_SW_RDY);
+    g_assert_cmphex(host_get_int(s, "status") & STS_PC_FREE, ==, 0);
+    espi_writel(s, ESPI_CH0_CTRL, ESPI_CH0_CTRL_RST_ALL |
+                ESPI_CH0_CTRL_SW_RDY);
+    g_assert_cmphex(host_get_int(s, "status") & STS_PC_FREE, ==,
+                    STS_PC_FREE);
+
+    qtest_quit(s);
+}
+
+/*
+ * Software sends a message to the host. It needs bus mastering, and the
+ * transmit control only takes the cycle types listed for it.
+ */
+static void test_perif_tx(void)
+{
+    QTestState *s = espi_start_host();
+    g_autofree char *data = NULL;
+    const uint8_t hdr[] = { 0x7e, 0x01, 0x02, 0x03, 0x04, 0xc3 };
+    int i;
+
+    espi_writel(s, ESPI_CH0_CTRL, ESPI_CH0_CTRL_RST_ALL |
+                ESPI_CH0_CTRL_SW_RDY);
+
+    for (i = 0; i < ARRAY_SIZE(hdr); i++) {
+        espi_writel(s, ESPI_CH0_PC_TX_DATA, hdr[i]);
+    }
+    espi_writel(s, ESPI_CH0_PC_TX_CTRL, ESPI_TX_TRIG | (1 << 12) |
+                PERIF_MSG_D_TRIG);
+    g_assert_cmphex(espi_readl(s, ESPI_CH0_INT_STS) & ESPI_CH0_INT_PC_TX_ERR,
+                    ==, ESPI_CH0_INT_PC_TX_ERR);
+    g_assert_cmpuint(host_get_int(s, "pc-count"), ==, 0);
+    espi_writel(s, ESPI_CH0_INT_STS, ESPI_CH0_INT_PC_TX_ERR);
+
+    g_assert_true(host_set_config(s, CFG_CH0, host_get_config(s, CFG_CH0) |
+                                  CFG_CH0_BUS_MASTER_EN));
+    for (i = 0; i < ARRAY_SIZE(hdr); i++) {
+        espi_writel(s, ESPI_CH0_PC_TX_DATA, hdr[i]);
+    }
+    espi_writel(s, ESPI_CH0_PC_TX_CTRL, ESPI_TX_TRIG | (1 << 12) |
+                PERIF_MSG_D_TRIG);
+    g_assert_cmpuint(host_get_int(s, "pc-count"), ==, 1);
+    g_assert_cmphex(host_get_int(s, "pc-cyc"), ==, PERIF_MSG_D);
+    g_assert_cmphex(host_get_int(s, "pc-msg"), ==, 0x7e);
+    g_assert_cmphex(host_get_int(s, "pc-addr"), ==, 0x04030201);
+    data = host_get_str(s, "pc-data");
+    g_assert_cmpstr(data, ==, "c3");
+    g_assert_cmphex(espi_readl(s, ESPI_CH0_INT_STS) &
+                    ESPI_CH0_INT_PC_TX_CMPLT, ==, ESPI_CH0_INT_PC_TX_CMPLT);
+
+    /* A message without data has length 0 */
+    for (i = 0; i < ARRAY_SIZE(hdr) - 1; i++) {
+        espi_writel(s, ESPI_CH0_PC_TX_DATA, hdr[i]);
+    }
+    espi_writel(s, ESPI_CH0_PC_TX_CTRL, ESPI_TX_TRIG | PERIF_MSG_TRIG);
+    g_assert_cmpuint(host_get_int(s, "pc-count"), ==, 2);
+    g_assert_cmphex(host_get_int(s, "pc-cyc"), ==, PERIF_MSG);
+    g_assert_cmpuint(host_get_int(s, "pc-len"), ==, 0);
+    g_assert_cmphex(host_get_int(s, "pc-addr"), ==, 0x04030201);
+
+    /* The bus encoding of a message is not a valid trigger type */
+    espi_writel(s, ESPI_CH0_PC_TX_CTRL, ESPI_TX_TRIG | PERIF_MSG);
+    /* Nor is a memory write on the non-posted queue */
+    espi_writel(s, ESPI_CH0_NP_TX_CTRL, ESPI_TX_TRIG | (4 << 12) |
+                PERIF_MEMWR32);
+    g_assert_cmpuint(host_get_int(s, "pc-count"), ==, 2);
+
+    qtest_quit(s);
+}
+
+/*
+ * A host write of a Host RWP in the memory buffer interface updates the
+ * read-only copy in the controller and raises its status bit.
+ */
+static void test_mmbi(void)
+{
+    QTestState *s = espi_start_host();
+    uint64_t base = AST2700_DRAM_BASE + 0x4000000;
+
+    espi_writel(s, ESPI_MMBI_CTRL, 0xffffff71);
+    g_assert_cmphex(espi_readl(s, ESPI_MMBI_CTRL), ==, 0x71);
+    espi_writel(s, ESPI_MMBI_INT_EN, 0xffffffff);
+    g_assert_cmphex(espi_readl(s, ESPI_MMBI_INT_EN), ==, 0xffff);
+
+    /* One instance, the 64 MiB region behind window 0 */
+    espi_writel(s, ESPI_MMBI_CTRL, 0x01);
+    espi_writel(s, ESPI_CH0_CTRL, ESPI_CH0_CTRL_RST_ALL);
+    perif_map_window(s, 0xf8000000, base, 0xfc000000);
+
+    g_assert_true(host_perif(s, PERIF_MEMWR32, 0xfa000000, 4, "11223344"));
+    g_assert_true(host_perif(s, PERIF_MEMWR32, 0xfa000004, 4, "55667788"));
+    g_assert_cmphex(espi_readl(s, ESPI_MMBI_RWP0), ==, 0x44332211);
+    g_assert_cmphex(espi_readl(s, ESPI_MMBI_RWP1), ==, 0x88776655);
+    g_assert_cmphex(espi_readl(s, ESPI_MMBI_INT_STS), ==, 0x3);
+    g_assert_cmphex(qtest_readl(s, base + 0x2000000), ==, 0x44332211);
+
+    /* Read-only for the BMC */
+    espi_writel(s, ESPI_MMBI_RWP0, 0);
+    g_assert_cmphex(espi_readl(s, ESPI_MMBI_RWP0), ==, 0x44332211);
+    espi_writel(s, ESPI_MMBI_INT_STS, 0x1);
+    g_assert_cmphex(espi_readl(s, ESPI_MMBI_INT_STS), ==, 0x2);
+
+    /* Write protection keeps the enable */
+    espi_writel(s, ESPI_MMBI_CTRL, 0x03);
+    espi_writel(s, ESPI_MMBI_CTRL, 0x02);
+    g_assert_cmphex(espi_readl(s, ESPI_MMBI_CTRL), ==, 0x03);
+
+    qtest_quit(s);
+}
+
+/*
+ * KCS over host I/O cycles: channel 3 at a programmed address, channel 1 at
+ * its reset address with the status port four above the data port.
+ */
+static void test_kcs(void)
+{
+    QTestState *s = espi_start_host();
+
+    lpc_writel(s, LPC_LADR3H, 0x0c);
+    lpc_writel(s, LPC_LADR3L, 0xa2);
+    lpc_writel(s, LPC_HICR4, LPC_HICR4_KCSENBL);
+    lpc_writel(s, LPC_HICR0, LPC_HICR0_LPC3E | LPC_HICR0_LPC1E);
+
+    host_io_write(s, 0xca3, 0x61);
+    g_assert_cmphex(lpc_readl(s, LPC_STR3), ==, LPC_STR_IBF | LPC_STR_CMD);
+    g_assert_cmphex(lpc_readl(s, LPC_IDR3), ==, 0x61);
+    lpc_writel(s, LPC_ODR3, 0x5a);
+    g_assert_cmphex(host_io_read(s, 0xca3) & LPC_STR_OBF, ==, LPC_STR_OBF);
+    g_assert_cmphex(host_io_read(s, 0xca2), ==, 0x5a);
+    g_assert_cmphex(lpc_readl(s, LPC_STR3) & LPC_STR_OBF, ==, 0);
+
+    host_io_write(s, 0x64, 0x62);
+    g_assert_cmphex(lpc_readl(s, LPC_STR1), ==, LPC_STR_IBF | LPC_STR_CMD);
+    host_io_write(s, 0x60, 0x63);
+    g_assert_cmphex(lpc_readl(s, LPC_STR1), ==, LPC_STR_IBF);
+    g_assert_cmphex(lpc_readl(s, LPC_IDR1), ==, 0x63);
+
+    qtest_quit(s);
+}
+
+/* LADR12H/L hold one address per channel, selected by HICR4 */
+static void test_kcs_ladr_banks(void)
+{
+    QTestState *s = espi_start();
+
+    g_assert_cmphex(lpc_readl(s, LPC_LADR12L), ==, 0x00600060);
+    g_assert_cmphex(lpc_readl(s, LPC_LADR12H), ==, 0x00620000);
+
+    lpc_writel(s, LPC_HICR4, LPC_HICR4_LADR12AS);
+    g_assert_cmphex(lpc_readl(s, LPC_LADR12L), ==, 0x00600062);
+    lpc_writel(s, LPC_LADR12H, 0x0c);
+    lpc_writel(s, LPC_LADR12L, 0xa8);
+    lpc_writel(s, LPC_HICR4, 0);
+    g_assert_cmphex(lpc_readl(s, LPC_LADR12L), ==, 0x00600060);
+    g_assert_cmphex(lpc_readl(s, LPC_LADR12H), ==, 0x0ca80000);
+
+    qtest_quit(s);
+}
+
+/*
+ * The LPC PME output, enabled by HICR0[2] and set by HICR1[2], drives the
+ * PME# virtual wire low; software cannot write PME# in the System Event
+ * register.
+ */
+static void test_lpc_pme(void)
+{
+    QTestState *s = espi_start_host();
+    uint32_t pme = 1u << 19;
+
+    g_assert_cmphex(espi_readl(s, ESPI_CH1_EVT0) & pme, ==, pme);
+    espi_writel(s, ESPI_CH1_EVT0, espi_readl(s, ESPI_CH1_EVT0) & ~pme);
+    g_assert_cmphex(espi_readl(s, ESPI_CH1_EVT0) & pme, ==, pme);
+
+    /* The output bit alone does nothing */
+    lpc_writel(s, LPC_HICR1, LPC_HICR1_PMEB);
+    g_assert_cmpuint(host_get_int(s, "vw-count"), ==, 0);
+
+    /* PME# is wire 3 of index 4: valid bit 7, level bit 3 */
+    lpc_writel(s, LPC_HICR0, LPC_HICR0_PMEE);
+    g_assert_cmpuint(host_get_int(s, "vw-count"), ==, 1);
+    g_assert_cmphex(host_get_int(s, "vw-index"), ==, 4);
+    g_assert_cmphex(host_get_int(s, "vw-data"), ==, 0x80);
+    g_assert_cmphex(espi_readl(s, ESPI_CH1_EVT0) & pme, ==, 0);
+
+    lpc_writel(s, LPC_HICR1, 0);
+    g_assert_cmpuint(host_get_int(s, "vw-count"), ==, 2);
+    g_assert_cmphex(host_get_int(s, "vw-data"), ==, 0x88);
+    g_assert_cmphex(espi_readl(s, ESPI_CH1_EVT0) & pme, ==, pme);
+
+    qtest_quit(s);
+}
+
+/* Post codes written to port 80 collect in the 256-byte capture FIFO */
+static void test_pcc_fifo(void)
+{
+    QTestState *s = espi_start_host();
+    int i;
+
+    g_assert_cmphex(lpc_readl(s, LPC_PCCR0), ==, 0x60000000);
+    g_assert_cmphex(lpc_readl(s, LPC_PCCR5), ==, 0x10000000);
+    lpc_writel(s, LPC_PCCR5, 0xffffffff);
+    g_assert_cmphex(lpc_readl(s, LPC_PCCR5), ==, 0x1fffffff);
+    lpc_writel(s, LPC_PCCR4, 0xffffffff);
+    g_assert_cmphex(lpc_readl(s, LPC_PCCR4), ==, 0xfffffff0);
+
+    lpc_writel(s, LPC_PCCR1, 0x80);
+    lpc_writel(s, LPC_PCCR0, LPC_PCCR0_EN | LPC_PCCR0_RXAVA_EN);
+
+    host_io_write(s, 0x80, 0x5a);
+    g_assert_cmphex(lpc_readl(s, LPC_PCCR2), ==,
+                    (1 << 24) | LPC_PCCR2_DATA_RDY | LPC_PCCR2_RXAVA);
+    /* Data ready follows the FIFO, writing it has no effect */
+    lpc_writel(s, LPC_PCCR2, 0xffffffff);
+    g_assert_cmphex(lpc_readl(s, LPC_PCCR2) & LPC_PCCR2_DATA_RDY, ==,
+                    LPC_PCCR2_DATA_RDY);
+    g_assert_cmphex(lpc_readl(s, LPC_PCCR3), ==, 0x0100015a);
+    g_assert_cmphex(lpc_readl(s, LPC_PCCR2), ==, 1 << 24);
+
+    /* One more than the FIFO holds overruns it */
+    for (i = 0; i < 257; i++) {
+        host_io_write(s, 0x80, i);
+    }
+    g_assert_cmphex(lpc_readl(s, LPC_PCCR2) & (LPC_PCCR2_RXOVR | 0x60), ==,
+                    LPC_PCCR2_RXOVR | 0x60);
+    g_assert_cmphex(lpc_readl(s, LPC_PCCR3) & 0xff, ==, 0x00);
+    lpc_writel(s, LPC_PCCR2, LPC_PCCR2_RXOVR);
+    lpc_writel(s, LPC_PCCR0, LPC_PCCR0_EN | LPC_PCCR0_CLR_FIFO);
+    g_assert_cmphex(lpc_readl(s, LPC_PCCR2) & 0xff, ==, 0);
+
+    qtest_quit(s);
+}
+
+/* Enable VUART 0 at the given host port, holding the host off while full */
+static void vuart_enable(QTestState *s)
+{
+    vuart_writel(s, VUART_ADDRH, VUART_HOST_PORT >> 8);
+    vuart_writel(s, VUART_ADDRL, VUART_HOST_PORT & 0xf8);
+    vuart_writel(s, VUART_GCRA, 0x21);
+}
+
+/*
+ * Bytes cross between the host and the BMC through the two FIFOs. A side's
+ * transmitter stays busy until the other side has taken the byte.
+ */
+static void test_vuart_data(void)
+{
+    QTestState *s = espi_start_host();
+
+    vuart_enable(s);
+
+    host_io_write(s, VUART_HOST_PORT, 'h');
+    g_assert_cmphex(host_io_read(s, VUART_HOST_PORT + 5) & VUART_LSR_THRE,
+                    ==, 0);
+    g_assert_cmphex(vuart_readl(s, VUART_LSR) & VUART_LSR_DR, ==,
+                    VUART_LSR_DR);
+    g_assert_cmphex(vuart_readl(s, VUART_THR), ==, 'h');
+    g_assert_cmphex(host_io_read(s, VUART_HOST_PORT + 5) & VUART_LSR_THRE,
+                    ==, VUART_LSR_THRE);
+
+    vuart_writel(s, VUART_THR, 'b');
+    g_assert_cmphex(vuart_readl(s, VUART_LSR) & VUART_LSR_THRE, ==, 0);
+    g_assert_cmphex(host_io_read(s, VUART_HOST_PORT + 5) & VUART_LSR_DR, ==,
+                    VUART_LSR_DR);
+    g_assert_cmphex(host_io_read(s, VUART_HOST_PORT), ==, 'b');
+    g_assert_cmphex(vuart_readl(s, VUART_LSR) & VUART_LSR_THRE, ==,
+                    VUART_LSR_THRE);
+
+    qtest_quit(s);
+}
+
+/* The general control registers that report the state of the two sides */
+static void test_vuart_status_regs(void)
+{
+    QTestState *s = espi_start_host();
+    int i;
+
+    vuart_enable(s);
+
+    /* Host IER bits 3:0 and FIFO enable, slave trigger level */
+    host_io_write(s, VUART_HOST_PORT + 1, 0x0f);
+    vuart_writel(s, VUART_FCR, 0x40);
+    g_assert_cmphex(vuart_readl(s, VUART_GCRH), ==, 0x5f);
+
+    /* The FIFOs cannot be turned off, on either side */
+    vuart_writel(s, VUART_FCR, 0x00);
+    g_assert_cmphex(vuart_readl(s, VUART_FCR) & 0xc0, ==, 0xc0);
+    host_io_write(s, VUART_HOST_PORT + 2, 0x00);
+    g_assert_cmphex(vuart_readl(s, VUART_GCRH) & 0x10, ==, 0x10);
+
+    /* Slave IER bit 7 is reserved */
+    vuart_writel(s, VUART_GCRF, 0x40);
+    vuart_writel(s, VUART_IER, 0xff);
+    g_assert_cmphex(vuart_readl(s, VUART_IER), ==, 0x0f);
+    vuart_writel(s, VUART_IER, 0);
+    vuart_writel(s, VUART_GCRF, 0);
+
+    /* GCRG reads back the slave THR, or the timeout width bits */
+    vuart_writel(s, VUART_THR, 0x77);
+    g_assert_cmphex(vuart_readl(s, VUART_GCRG), ==, 0x77);
+    vuart_writel(s, VUART_GCRG, 0xff);
+    vuart_writel(s, VUART_GCRF, 0x04);
+    g_assert_cmphex(vuart_readl(s, VUART_GCRG), ==, 0x03);
+    vuart_writel(s, VUART_GCRF, 0);
+
+    /* GCRE bit 7: the slave transmit FIFO is full */
+    g_assert_cmphex(vuart_readl(s, VUART_GCRE) & 0x80, ==, 0);
+    for (i = 1; i < 16; i++) {
+        vuart_writel(s, VUART_THR, i);
+    }
+    g_assert_cmphex(vuart_readl(s, VUART_GCRE) & 0x80, ==, 0x80);
+
+    qtest_quit(s);
+}
+
+/*
+ * The host-side interrupt of the VUART goes to the host as the IRQ virtual
+ * wire GCRB selects, once when raised and once when cleared.
+ */
+static void test_vuart_sirq(void)
+{
+    QTestState *s = espi_start_host();
+
+    vuart_enable(s);
+    vuart_writel(s, VUART_GCRB, 4 << 4);
+    host_io_write(s, VUART_HOST_PORT + 1, 0x01);
+    g_assert_cmpuint(host_get_int(s, "vw-count"), ==, 0);
+
+    vuart_writel(s, VUART_THR, 'x');
+    g_assert_cmpuint(host_get_int(s, "vw-count"), ==, 1);
+    g_assert_cmphex(host_get_int(s, "vw-index"), ==, 0);
+    g_assert_cmphex(host_get_int(s, "vw-data"), ==, 0x84);
+
+    g_assert_cmphex(host_io_read(s, VUART_HOST_PORT), ==, 'x');
+    g_assert_cmpuint(host_get_int(s, "vw-count"), ==, 2);
+    g_assert_cmphex(host_get_int(s, "vw-data"), ==, 0x04);
+
+    qtest_quit(s);
+}
+
 int main(int argc, char **argv)
 {
     g_test_init(&argc, &argv, NULL);
@@ -860,6 +1511,9 @@ int main(int argc, char **argv)
     qtest_add_func("/ast2700/espi/vw_event_ownership",
                    test_vw_event_ownership);
     qtest_add_func("/ast2700/espi/two_instances", test_two_instances);
+    qtest_add_func("/ast2700/espi/perif_ctrl", test_perif_ctrl);
+    qtest_add_func("/ast2700/espi/perif_masks", test_perif_masks);
+    qtest_add_func("/ast2700/espi/kcs_ladr_banks", test_kcs_ladr_banks);
 
     if (qtest_has_device("aspeed-espi-mock-host")) {
         qtest_add_func("/ast2700/espi/host/config", test_config);
@@ -878,6 +1532,20 @@ int main(int argc, char **argv)
                        test_flash_hw_memory);
         qtest_add_func("/ast2700/espi/host/flash_hw_spi", test_flash_hw_spi);
         qtest_add_func("/ast2700/espi/host/link_reset", test_link_reset);
+        qtest_add_func("/ast2700/espi/host/perif_memory", test_perif_memory);
+        qtest_add_func("/ast2700/espi/host/perif_message_rx",
+                       test_perif_message_rx);
+        qtest_add_func("/ast2700/espi/host/perif_rx_reset",
+                       test_perif_rx_reset);
+        qtest_add_func("/ast2700/espi/host/perif_tx", test_perif_tx);
+        qtest_add_func("/ast2700/espi/host/mmbi", test_mmbi);
+        qtest_add_func("/ast2700/espi/host/kcs", test_kcs);
+        qtest_add_func("/ast2700/espi/host/pcc_fifo", test_pcc_fifo);
+        qtest_add_func("/ast2700/espi/host/lpc_pme", test_lpc_pme);
+        qtest_add_func("/ast2700/espi/host/vuart_data", test_vuart_data);
+        qtest_add_func("/ast2700/espi/host/vuart_status_regs",
+                       test_vuart_status_regs);
+        qtest_add_func("/ast2700/espi/host/vuart_sirq", test_vuart_sirq);
     }
 
     return g_test_run();
