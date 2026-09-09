@@ -62,6 +62,131 @@
 #define ESPI_CH2_BASE           0x300
 
 /*
+ * Peripheral channel (channel 0). Three cycle-carrying queues -- Posted Rx,
+ * Posted Tx, Non-Posted Tx -- plus a pair of Rx address-translation windows.
+ * Software has no Non-Posted Rx dataport: completions for the BMC's own
+ * outbound non-posted reads come back through the Posted Rx queue.
+ */
+#define ESPI_CH0_CTRL           0x100
+#define   ESPI_CH0_CTRL_NP_TX_RST      BIT(31)  /* active low */
+#define   ESPI_CH0_CTRL_NP_RX_RST      BIT(30)  /* active low */
+#define   ESPI_CH0_CTRL_PC_TX_RST      BIT(29)  /* active low */
+#define   ESPI_CH0_CTRL_PC_RX_RST      BIT(28)  /* active low */
+#define   ESPI_CH0_CTRL_NP_TX_DMA_EN   BIT(19)
+#define   ESPI_CH0_CTRL_PC_TX_DMA_EN   BIT(17)
+#define   ESPI_CH0_CTRL_PC_RX_DMA_EN   BIT(16)
+#define   ESPI_CH0_CTRL_LPC_RST_SRC    BIT(15)
+#define   ESPI_CH0_CTRL_MCYC_RD_WDT_DIS BIT(9)
+#define   ESPI_CH0_CTRL_MCYC_WR_WDT_DIS BIT(8)
+#define   ESPI_CH0_CTRL_MCYC_RD_LOCK   BIT(7)   /* RW1S, locks bit 6 */
+#define   ESPI_CH0_CTRL_MCYC_RD_DIS    BIT(6)
+#define   ESPI_CH0_CTRL_MCYC_WR_LOCK   BIT(5)   /* RW1S, locks bit 4 */
+#define   ESPI_CH0_CTRL_MCYC_WR_DIS    BIT(4)
+#define   ESPI_CH0_CTRL_SW_RDY         BIT(1)
+#define   ESPI_CH0_CTRL_READY          BIT(0)
+/* Ready (bit 0) and the reserved bits 27:20, 18, 14:10 and 3:2 */
+#define   ESPI_CH0_CTRL_RO             0x0ff47c0d
+#define ESPI_CH0_STS            0x104
+#define   ESPI_CH0_STS_NP_TX_BUSY      BIT(19)
+#define   ESPI_CH0_STS_NP_RX_BUSY      BIT(18)
+#define   ESPI_CH0_STS_PC_TX_BUSY      BIT(17)
+#define   ESPI_CH0_STS_PC_RX_BUSY      BIT(16)
+#define   ESPI_CH0_STS_BUS_MASTER_EN   BIT(5)
+#define ESPI_CH0_INT_STS        0x108
+#define   ESPI_CH0_INT_STS_NP_TX_ABORT BIT(9)
+#define   ESPI_CH0_INT_STS_PC_TX_ABORT BIT(8)
+#define   ESPI_CH0_INT_STS_NP_RX_ABORT BIT(7)
+#define   ESPI_CH0_INT_STS_PC_RX_ABORT BIT(6)
+#define   ESPI_CH0_INT_STS_NP_TX_ERR   BIT(5)
+#define   ESPI_CH0_INT_STS_PC_TX_ERR   BIT(4)
+#define   ESPI_CH0_INT_STS_NP_TX_CMPLT BIT(3)
+#define   ESPI_CH0_INT_STS_PC_TX_CMPLT BIT(1)
+#define   ESPI_CH0_INT_STS_PC_RX_CMPLT BIT(0)
+#define ESPI_CH0_INT_EN         0x10c
+#define   ESPI_CH0_INT_EN_MASK         MAKE_64BIT_MASK(0, 10)
+
+/* Bits 1:0 of a DMA address register and 30:24 of a Tx control are RO */
+#define ESPI_CH0_DMAL_MASK      0xfffffffc
+#define ESPI_CH0_TX_CTRL_MASK   0x80ffffff
+
+#define ESPI_CH0_PC_RX_DMAL     0x110
+#define ESPI_CH0_PC_RX_DMAH     0x114
+#define ESPI_CH0_PC_RX_CTRL     0x118
+#define ESPI_CH0_PC_RX_DATA     0x11c
+
+#define ESPI_CH0_PC_TX_DMAL     0x120
+#define ESPI_CH0_PC_TX_DMAH     0x124
+#define ESPI_CH0_PC_TX_CTRL     0x128
+#define ESPI_CH0_PC_TX_DATA     0x12c
+
+#define ESPI_CH0_NP_TX_DMAL     0x130
+#define ESPI_CH0_NP_TX_DMAH     0x134
+#define ESPI_CH0_NP_TX_CTRL     0x138
+#define ESPI_CH0_NP_TX_DATA     0x13c
+
+/*
+ * The two Rx address-translation windows, 0x140-0x16c. Each is a
+ * Source/Target/Mask triple of L/H register pairs, stride 0x18; mask bit 0
+ * is that window's own enable.
+ */
+#define ESPI_CH0_MAP_FIRST      0x140
+#define ESPI_CH0_MAP_STRIDE     0x18
+#define ESPI_CH0_MAP_NR_WINDOWS 2
+#define ESPI_CH0_MAP_SRCL       0x00
+#define ESPI_CH0_MAP_SRCH       0x04
+#define ESPI_CH0_MAP_TGTL       0x08
+#define ESPI_CH0_MAP_TGTH       0x0c
+#define ESPI_CH0_MAP_MASKL      0x10
+#define ESPI_CH0_MAP_MASKH      0x14
+#define   ESPI_CH0_MAP_MASKL_EN BIT(0)
+/* Only bits 31:16 of the low registers hold address; bit 0 of mask is EN */
+#define   ESPI_CH0_MAP_ADDRL_MASK  0xffff0000
+#define   ESPI_CH0_MAP_MASKL_MASK  0xffff0001
+
+/*
+ * Peripheral channel cycle types as eSPI encodes them -- what travels on
+ * the bus and what the Rx descriptor carries. ESPI138 (Non-Posted Tx) only
+ * ever holds the two read types, which is all the target originates as bus
+ * master. ESPI128 (Posted Tx) holds writes and messages; the register field
+ * also accepts the completion set, for a target that answers an inbound
+ * non-posted read itself rather than having hardware do it, but this model
+ * always services those reads synchronously in hardware and never takes that
+ * path. Message cycles are handled separately: ESPI128 programs them with
+ * the ASPEED register encoding 0x40/0x41, translated to 0x10/0x11 on the way
+ * out.
+ */
+#define ESPI_PERIF_MEMWR32              0x01
+#define ESPI_PERIF_MEMWR64              0x03
+#define ESPI_PERIF_MEMRD32              0x00
+#define ESPI_PERIF_MEMRD64              0x02
+#define ESPI_PERIF_MSG                  0x10
+#define ESPI_PERIF_MSG_D                0x11
+#define ESPI_PERIF_SUC_CMPLT            0x06
+#define ESPI_PERIF_SUC_CMPLT_D_MIDDLE   0x09
+#define ESPI_PERIF_SUC_CMPLT_D_FIRST    0x0b
+#define ESPI_PERIF_UNSUC_CMPLT_LAST     0x0c
+#define ESPI_PERIF_SUC_CMPLT_D_LAST     0x0d
+#define ESPI_PERIF_UNSUC_CMPLT_ONLY     0x0e
+#define ESPI_PERIF_SUC_CMPLT_D_ONLY     0x0f
+
+/*
+ * I/O cycles travel as short cycles, which carry no cycle type, and complete
+ * in hardware without reaching software. The host side of this model names
+ * them with these two values.
+ */
+#define ESPI_PERIF_IORD                 0x20
+#define ESPI_PERIF_IOWR                 0x21
+
+/*
+ * ASPEED programming encoding for a message Tx trigger on ESPI128, distinct
+ * from the wire/Rx-descriptor encoding above. Only meaningful in the cycle
+ * type field software writes to trigger a Posted Tx; translated to
+ * ESPI_PERIF_MSG/MSG_D before the cycle leaves the target.
+ */
+#define ESPI_PERIF_MSG_TRIG             0x40
+#define ESPI_PERIF_MSG_D_TRIG           0x41
+
+/*
  * Virtual wire channel (channel 1). The channel carries system events rather
  * than data: level changes on named wires, delivered in two event registers.
  */
@@ -92,6 +217,7 @@
  * The rest are the controller's or are driven by other blocks.
  */
 #define   ESPI_CH1_EVT0_WMASK       0x0cf10000
+#define   ESPI_CH1_EVT0_PME         BIT(19)     /* active low */
 #define   ESPI_CH1_EVT0_INT_EN_MASK MAKE_64BIT_MASK(0, 16)
 /*
  * System Event 1: software drives the BMC generic byte and Suspend
@@ -103,7 +229,12 @@
 #define ESPI_CH3_BASE           0x400
 
 /* Virtual wire encoding on the eSPI bus */
+#define ESPI_VW_INDEX_IRQ       0x00
+#define   ESPI_VW_IRQ_LEVEL     BIT(7)
+#define ESPI_VW_INDEX_SYSEVT6   0x06
 #define ESPI_VW_VALID(wire)     BIT((wire) + 4)
+/* VUART GCRB[7:4] value that routes SIRQ to SMI# rather than an IRQ */
+#define ESPI_VUART_SIRQ_SMI     2
 
 /* Flash channel (channel 3) */
 #define ESPI_CH3_CTRL           0x400
@@ -205,6 +336,17 @@ static const uint32_t espi_erase_size_kb[] = { 4, 32, 64, 128 };
                                      ESPI_STATUS_FLASH_C_FREE)
 
 /*
+ * Peripheral channel status bits. PC_FREE/NP_FREE report whether the shared
+ * Rx queue has room for another posted or non-posted cycle; PC_AVAIL/NP_AVAIL
+ * are the target's own outbound queues and, since a Tx trigger here leaves
+ * immediately rather than waiting to be collected, never legitimately set.
+ */
+#define ESPI_STATUS_PERIF_PC_FREE   BIT(0)
+#define ESPI_STATUS_PERIF_NP_FREE   BIT(1)
+#define ESPI_STATUS_PERIF_PC_AVAIL  BIT(4)
+#define ESPI_STATUS_PERIF_NP_AVAIL  BIT(5)
+
+/*
  * SW_RDY lives at a different bit in each channel control register, and each
  * channel's control and status registers come up with a reset value of
  * the channel's own.
@@ -218,6 +360,7 @@ aspeed_espi_chan_info[ASPEED_ESPI_NR_CHAN] = {
     [ASPEED_ESPI_CHAN_PERIF] = {
         .name = "peripheral", .base = ESPI_CH0_BASE, .sw_rdy = BIT(1),
         .ctrl_reset = 0xf0000350, .sts_reset = 0xfd000001,
+        .ctrl_ro = ESPI_CH0_CTRL_RO,
     },
     [ASPEED_ESPI_CHAN_VW] = {
         .name = "virtual wire", .base = ESPI_CH1_BASE, .sw_rdy = BIT(1),
@@ -266,6 +409,32 @@ aspeed_espi_chan_info[ASPEED_ESPI_NR_CHAN] = {
 #define ESPI_FLTR_SADDR_RESET   0xffffc006
 #define ESPI_FLTR_EADDR_RESET   0x00000000
 
+/* Mapped Memory Buffer Interface */
+#define ESPI_MMBI_CTRL          0x800
+/*
+ * The instance count field is one less than the count: 0, 1, 3 and 7 select
+ * one, two, four and eight instances, the other values are reserved.
+ */
+#define   ESPI_MMBI_CTRL_INST_NUM   MAKE_64BIT_MASK(4, 3)
+#define   ESPI_MMBI_CTRL_WPROT_EN   BIT(1)
+#define   ESPI_MMBI_CTRL_EN         BIT(0)
+#define   ESPI_MMBI_CTRL_MASK       0x73
+#define ESPI_MMBI_INT_STS       0x808
+#define ESPI_MMBI_INT_EN        0x80c
+#define   ESPI_MMBI_INT_MASK        0xffff
+#define ESPI_MMBI_HOST_RWP_FIRST 0x810
+#define ESPI_MMBI_HOST_RWP_LAST  0x84c
+
+/*
+ * A fixed 64 MiB region, split evenly BMC2Host then Host2BMC. The register
+ * file has no MMBI base of its own, so the model takes the target of
+ * peripheral mapping window 0 (ESPI148/14C) as that base. Each of up to
+ * ASPEED_ESPI_MMBI_MAX instances gets an equal share of each half; the
+ * first eight bytes of a Host2BMC share are that instance's Host RWP.
+ */
+#define ASPEED_ESPI_MMBI_REGION_SIZE   (64 * MiB)
+#define ASPEED_ESPI_MMBI_HALF_SIZE     (32 * MiB)
+
 /*
  * Reset values of the global block. Capability registers are fixed at reset,
  * so each is a property a board can override. 0x6401 in the second flash
@@ -289,6 +458,17 @@ aspeed_espi_chan_info[ASPEED_ESPI_NR_CHAN] = {
 #define ESPI_DEV_STS_RESET      0x01040104
 
 /*
+ * Peripheral channel mapping windows. Each is a source, target and mask
+ * triplet; only the masks come up non-zero.
+ */
+#define ESPI_CH0_MCYC0_MASKL    0x150
+#define ESPI_CH0_MCYC0_MASKH    0x154
+#define ESPI_CH0_MCYC1_MASKL    0x168
+#define ESPI_CH0_MCYC1_MASKH    0x16c
+#define ESPI_CH0_MCYC_MASKL_RESET 0xffff0000
+#define ESPI_CH0_MCYC_MASKH_RESET 0xffffffff
+
+/*
  * Flash channel mapping window. The mask reaches 40 bits, so its reset
  * describes a window rather than an open one.
  */
@@ -306,6 +486,11 @@ static bool aspeed_espi_offset_implemented(hwaddr offset)
         (offset >= ESPI_DEV_STS && offset <= ESPI_DBG_RES) ||
         (offset >= ESPI_CH_ACC_CTRL && offset <= ESPI_CH_ACC_OFST2) ||
         (offset >= ESPI_WPROT0 && offset <= ESPI_WPROT1)) {
+        return true;
+    }
+
+    /* Peripheral channel: control, queues and the two mapped-cycle windows */
+    if (offset >= ESPI_CH0_BASE && offset <= 0x16c) {
         return true;
     }
 
@@ -338,6 +523,17 @@ static bool aspeed_espi_offset_implemented(hwaddr offset)
         return true;
     }
 
+    /*
+     * MMBI: control, interrupt status and enable, then the two Host RWP
+     * dwords of each instance.
+     */
+    if (offset == ESPI_MMBI_CTRL ||
+        offset == ESPI_MMBI_INT_STS || offset == ESPI_MMBI_INT_EN ||
+        (offset >= ESPI_MMBI_HOST_RWP_FIRST &&
+         offset <= ESPI_MMBI_HOST_RWP_LAST)) {
+        return true;
+    }
+
     /* Per-channel write-protect pairs sit at the top of each block */
     switch (offset) {
     case 0x1f8 ... 0x1fc:
@@ -354,7 +550,8 @@ static bool aspeed_espi_offset_implemented(hwaddr offset)
 
 /*
  * Registers the guest may not write: the capability registers, fixed at
- * reset, and the status and debug result registers. On the AST2700 the
+ * reset, the status and debug result registers, and the MMBI Host RWPs,
+ * which only the host writes. On the AST2700 the
  * second flash channel capability register is writable, so software can
  * narrow the erase sizes it advertises.
  */
@@ -369,6 +566,7 @@ static bool aspeed_espi_offset_ro(hwaddr offset)
     case ESPI_DEV_STS:
     case ESPI_DBG_CMD:
     case ESPI_DBG_RES:
+    case ESPI_MMBI_HOST_RWP_FIRST ... ESPI_MMBI_HOST_RWP_LAST:
         return true;
     default:
         return false;
@@ -395,6 +593,14 @@ static void aspeed_espi_flash_update_status(AspeedESPIState *s);
 /* The erase size the two ends settle on, in the flash channel's config */
 #define ESPI_CFG_CH3_ERASE      MAKE_64BIT_MASK(2, 3)
 #define ESPI_CFG_CHAN_READY     BIT(1)
+/*
+ * Whether the controller has granted the target permission to originate
+ * peripheral cycles as bus master, in the peripheral channel's config.
+ * Negotiated, not something software sets -- mirrored read-only into
+ * ESPI_CH0_STS_BUS_MASTER_EN the same way ESPI_CFG_CHAN_ENABLE is mirrored
+ * into ESPI_CHAN_STS_CHAN_EN.
+ */
+#define ESPI_CFG_CH0_BUS_MASTER_EN BIT(2)
 
 /* Backing register for a configuration address, or -1 if it has none */
 static int aspeed_espi_config_reg(uint16_t cfg_addr)
@@ -492,6 +698,26 @@ static void aspeed_espi_chan_refresh(AspeedESPIState *s, int chan)
         s->regs[TO_REG(info->base + ESPI_CHAN_CTRL)] = ctrl;
     }
 
+    if (chan == ASPEED_ESPI_CHAN_PERIF) {
+        uint32_t ctrl = s->regs[TO_REG(info->base + ESPI_CHAN_CTRL)];
+
+        ctrl &= ~ESPI_CH0_CTRL_READY;
+        if (cfg & ESPI_CFG_CHAN_READY) {
+            ctrl |= ESPI_CH0_CTRL_READY;
+        }
+        s->regs[TO_REG(info->base + ESPI_CHAN_CTRL)] = ctrl;
+
+        /*
+         * Bus mastering is negotiated by the controller, not requested by
+         * the target, so mirror it read-only the same way channel enable
+         * is mirrored above.
+         */
+        sts &= ~ESPI_CH0_STS_BUS_MASTER_EN;
+        if (cfg & ESPI_CFG_CH0_BUS_MASTER_EN) {
+            sts |= ESPI_CH0_STS_BUS_MASTER_EN;
+        }
+    }
+
     s->regs[TO_REG(info->base + ESPI_CHAN_STS)] = sts;
 }
 
@@ -547,7 +773,7 @@ uint32_t aspeed_espi_get_config(AspeedESPIState *s, uint16_t cfg_addr)
  * support field, bits 7:5.
  */
 #define ESPI_CFG_GEN_WMASK      0xdcf0f000
-#define ESPI_CFG_CH0_WMASK      0x00007705
+#define ESPI_CFG_CH0_WMASK      (0x00007701 | ESPI_CFG_CH0_BUS_MASTER_EN)
 #define ESPI_CFG_CH1_WMASK      0x003f0001
 #define ESPI_CFG_CH2_WMASK      0x00000701
 #define ESPI_CFG_CH3_WMASK      0x00007ffd
@@ -665,12 +891,94 @@ static void aspeed_espi_update_status(AspeedESPIState *s)
 }
 
 /*
+ * Send the linked VUART's host-side SIRQ level to the controller as a
+ * virtual wire. GCRB[7:4] selects IRQ0-15, except 2, which selects SMI#:
+ * that goes out as the SMI# wire (index 6, active low), every other value as
+ * an IRQ wire (index 0, level in bit 7). Never while servicing a controller
+ * request -- same reasoning as vw_notify/alert_notify/pc_notify above.
+ */
+static void aspeed_espi_sirq_notify(AspeedESPIState *s)
+{
+    uint8_t sirq;
+
+    if (s->in_ctrl_request || !s->vuart || !s->notifier ||
+        !s->notifier->vw_notify) {
+        return;
+    }
+
+    sirq = aspeed_vuart_get_sirq_num(s->vuart);
+    if (sirq == ESPI_VUART_SIRQ_SMI) {
+        s->notifier->vw_notify(s->notifier_opaque, ESPI_VW_INDEX_SYSEVT6,
+                               ESPI_VW_VALID(1) |
+                               (s->sirq_level ? 0 : BIT(1)));
+    } else {
+        s->notifier->vw_notify(s->notifier_opaque, ESPI_VW_INDEX_IRQ,
+                               (s->sirq_level ? ESPI_VW_IRQ_LEVEL : 0) | sirq);
+    }
+}
+
+/*
+ * Input GPIO handler for the linked VUART's sirq_out. SIRQ is level, not
+ * edge, driven purely by the VUART's own internal IIR state, so it can
+ * change at any time -- including while a controller request is being
+ * serviced. Cache the level and mark it dirty rather than notify directly;
+ * aspeed_espi_end_ctrl_request() re-evaluates once it is safe to call out,
+ * which is correct for a level line even though the edge that caused it is
+ * gone by then.
+ */
+static void aspeed_espi_vuart_sirq(void *opaque, int n, int level)
+{
+    AspeedESPIState *s = ASPEED_ESPI(opaque);
+
+    /* A virtual wire carries a change of level; a repeat sends nothing */
+    if (!!level == s->sirq_level) {
+        return;
+    }
+    s->sirq_level = level;
+
+    if (s->in_ctrl_request) {
+        s->sirq_dirty = true;
+        return;
+    }
+
+    aspeed_espi_sirq_notify(s);
+}
+
+/*
+ * The PME output of the linked LPC controller. PME# is one of the wires the
+ * target drives but software cannot write in the System Event register; it
+ * follows this input, active low, and goes to the controller on a change.
+ */
+static void aspeed_espi_vw_event(AspeedESPIState *s, hwaddr evt_reg,
+                                 uint32_t val);
+
+static void aspeed_espi_lpc_pme(void *opaque, int n, int level)
+{
+    AspeedESPIState *s = ASPEED_ESPI(opaque);
+    uint32_t val = s->regs[TO_REG(ESPI_CH1_EVT0)];
+
+    s->pme_level = level;
+    if (level) {
+        val &= ~ESPI_CH1_EVT0_PME;
+    } else {
+        val |= ESPI_CH1_EVT0_PME;
+    }
+    aspeed_espi_vw_event(s, ESPI_CH1_EVT0, val);
+}
+
+/*
  * Every exit point of a controller-request handler must go through this
- * instead of writing in_ctrl_request directly.
+ * instead of writing in_ctrl_request directly, so a SIRQ level change that
+ * arrived mid-request is not silently dropped.
  */
 static void aspeed_espi_end_ctrl_request(AspeedESPIState *s)
 {
     s->in_ctrl_request = false;
+
+    if (s->sirq_dirty) {
+        s->sirq_dirty = false;
+        aspeed_espi_sirq_notify(s);
+    }
 }
 
 /*
@@ -716,6 +1024,7 @@ static void aspeed_espi_update_irq(AspeedESPIState *s)
 }
 
 static void aspeed_espi_flash_update_window(AspeedESPIState *s);
+static void aspeed_espi_perif_update_windows(AspeedESPIState *s);
 
 /*
  * Bring one channel back to its post-reset state. Queues, status and pending
@@ -759,6 +1068,18 @@ static void aspeed_espi_chan_reset(AspeedESPIState *s, int chan)
         s->regs[TO_REG(ESPI_CH3_TX_CTRL)] &= ~ESPI_CYC_TRIG_PEND;
         s->regs[TO_REG(ESPI_CH3_RX_CTRL)] &= ~ESPI_CYC_SERV_PEND;
         aspeed_espi_flash_update_window(s);
+    }
+
+    /*
+     * Same reasoning as the flash channel above: a stale Rx/Tx descriptor
+     * surviving a link reset can be exposed to software or fed to the next
+     * trigger once the channel is re-armed, and the mapping windows need
+     * rebuilding from the registers, which keep the values, for the same
+     * reason.
+     */
+    if (chan == ASPEED_ESPI_CHAN_PERIF) {
+        memset(&s->perif, 0, sizeof(s->perif));
+        aspeed_espi_perif_update_windows(s);
     }
 
     aspeed_espi_chan_refresh(s, chan);
@@ -827,6 +1148,38 @@ static void aspeed_espi_flash_update_window(AspeedESPIState *s)
 
     trace_aspeed_espi_flash_window(s->flash.taddr, s->flash.mask,
                                    ~s->flash.mask + 1);
+}
+
+/*
+ * Recompute both peripheral channel mapping windows. Each is a
+ * source/target/mask register triple like the flash window above, plus its
+ * own enable bit stealing bit 0 of the mask-low register -- that bit is not
+ * part of the address mask and must not leak into it.
+ */
+static void aspeed_espi_perif_update_windows(AspeedESPIState *s)
+{
+    int i;
+
+    for (i = 0; i < ASPEED_ESPI_PERIF_NR_WINDOWS; i++) {
+        hwaddr base = ESPI_CH0_MAP_FIRST + i * ESPI_CH0_MAP_STRIDE;
+        uint32_t maskl = s->regs[TO_REG(base + ESPI_CH0_MAP_MASKL)];
+
+        s->perif.window[i].src =
+            ((uint64_t)s->regs[TO_REG(base + ESPI_CH0_MAP_SRCH)] << 32) |
+            s->regs[TO_REG(base + ESPI_CH0_MAP_SRCL)];
+        s->perif.window[i].tgt =
+            ((uint64_t)s->regs[TO_REG(base + ESPI_CH0_MAP_TGTH)] << 32) |
+            s->regs[TO_REG(base + ESPI_CH0_MAP_TGTL)];
+        s->perif.window[i].mask =
+            ((uint64_t)s->regs[TO_REG(base + ESPI_CH0_MAP_MASKH)] << 32) |
+            (maskl & ~ESPI_CH0_MAP_MASKL_EN);
+        s->perif.window[i].enabled = !!(maskl & ESPI_CH0_MAP_MASKL_EN);
+
+        trace_aspeed_espi_perif_window(i, s->perif.window[i].src,
+                                       s->perif.window[i].tgt,
+                                       s->perif.window[i].mask,
+                                       s->perif.window[i].enabled);
+    }
 }
 
 static uint32_t aspeed_espi_flash_mode(AspeedESPIState *s)
@@ -1072,6 +1425,99 @@ uint32_t aspeed_espi_vw_get_event(AspeedESPIState *s, bool evt1)
     return s->regs[TO_REG(evt1 ? ESPI_CH1_EVT1 : ESPI_CH1_EVT0)];
 }
 
+/*
+ * The mapped memory buffer interface has its own interrupt line, separate
+ * from the eSPI one, and two status bits per enabled instance.
+ */
+static void aspeed_espi_mmbi_update_irq(AspeedESPIState *s)
+{
+    uint32_t ctrl = s->regs[TO_REG(ESPI_MMBI_CTRL)];
+    uint32_t sts = s->regs[TO_REG(ESPI_MMBI_INT_STS)];
+    uint32_t en = s->regs[TO_REG(ESPI_MMBI_INT_EN)];
+    bool assert_irq = (ctrl & ESPI_MMBI_CTRL_EN) && (sts & en);
+
+    trace_aspeed_espi_mmbi_irq(sts, en, assert_irq);
+    qemu_set_irq(s->irq[ASPEED_ESPI_IRQ_MMBI], assert_irq);
+}
+
+static uint32_t aspeed_espi_mmbi_instances(AspeedESPIState *s)
+{
+    uint32_t field = (s->regs[TO_REG(ESPI_MMBI_CTRL)] &
+                      ESPI_MMBI_CTRL_INST_NUM) >> 4;
+
+    return field + 1;
+}
+
+/*
+ * A host memory write lands in the Host2BMC half of some instance's buffer.
+ * Host RWP only supports length-4 cycles, so anything else is outside the
+ * doorbell's reach and just a plain memory write. The write itself already
+ * happened in aspeed_espi_perif_cycle(); this only recognises where it
+ * landed and rings the bell.
+ */
+static void aspeed_espi_mmbi_host_write(AspeedESPIState *s, uint64_t mapped,
+                                        uint32_t len, const uint8_t *data)
+{
+    /* The base of the window's target, as the translation uses it */
+    uint64_t base = s->perif.window[0].tgt & s->perif.window[0].mask;
+    uint64_t h2b = base + ASPEED_ESPI_MMBI_HALF_SIZE;
+    uint32_t instances = aspeed_espi_mmbi_instances(s);
+    uint64_t inst_size = ASPEED_ESPI_MMBI_HALF_SIZE / instances;
+    uint64_t off, rwp_off;
+    uint32_t inst, half;
+    hwaddr reg;
+
+    if (!(s->regs[TO_REG(ESPI_MMBI_CTRL)] & ESPI_MMBI_CTRL_EN) ||
+        !s->perif.window[0].enabled) {
+        return;
+    }
+
+    if (len != 4 || mapped < h2b ||
+        mapped >= base + ASPEED_ESPI_MMBI_REGION_SIZE) {
+        return;
+    }
+
+    off = mapped - h2b;
+    inst = off / inst_size;
+    rwp_off = off % inst_size;
+    if (inst >= instances || (rwp_off != 0 && rwp_off != 4)) {
+        return;
+    }
+
+    half = rwp_off ? 1 : 0;
+    reg = ESPI_MMBI_HOST_RWP_FIRST + inst * 8 + rwp_off;
+    s->regs[TO_REG(reg)] = ldl_le_p(data);
+
+    trace_aspeed_espi_mmbi_host_rwp(inst, half, s->regs[TO_REG(reg)]);
+
+    s->regs[TO_REG(ESPI_MMBI_INT_STS)] |= BIT(2 * inst + half);
+    aspeed_espi_mmbi_update_irq(s);
+}
+
+static void aspeed_espi_mmbi_ctrl_write(AspeedESPIState *s, uint32_t val)
+{
+    uint32_t old = s->regs[TO_REG(ESPI_MMBI_CTRL)];
+    uint32_t field = (val & ESPI_MMBI_CTRL_INST_NUM) >> 4;
+    uint32_t instances = field + 1;
+
+    val &= ESPI_MMBI_CTRL_MASK;
+    if (!is_power_of_2(instances)) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: buffer instance field 0x%x is reserved\n",
+                      __func__, field);
+    }
+
+    /* While the write protection bit is set, the enable bit keeps its value */
+    if (old & ESPI_MMBI_CTRL_WPROT_EN) {
+        val = (val & ~ESPI_MMBI_CTRL_EN) | (old & ESPI_MMBI_CTRL_EN);
+    }
+
+    trace_aspeed_espi_mmbi_ctrl(!!(val & ESPI_MMBI_CTRL_EN), instances);
+
+    s->regs[TO_REG(ESPI_MMBI_CTRL)] = val;
+    aspeed_espi_mmbi_update_irq(s);
+}
+
 /* A length field of zero encodes the maximum payload, not an empty one. */
 static uint32_t aspeed_espi_cyc_len(uint32_t ctrl)
 {
@@ -1128,6 +1574,336 @@ static void aspeed_espi_flash_update_status(AspeedESPIState *s)
 
     chan->status = status;
     aspeed_espi_update_status(s);
+}
+
+/* Update what the peripheral channel contributes to the shared status word. */
+static void aspeed_espi_perif_update_status(AspeedESPIState *s)
+{
+    AspeedESPIChannel *chan = &s->chan[ASPEED_ESPI_CHAN_PERIF];
+    uint32_t ctrl = s->regs[TO_REG(ESPI_CH0_CTRL)];
+    uint32_t status = 0;
+
+    /*
+     * Advertising a free queue while software holds it in reset would let
+     * the controller send a cycle aspeed_espi_perif_cycle() then turns
+     * around and rejects, since that path checks PC_RX_RST itself.
+     */
+    if (chan->sw_ready && !s->perif.rx.pending &&
+        (ctrl & ESPI_CH0_CTRL_PC_RX_RST)) {
+        status |= ESPI_STATUS_PERIF_PC_FREE | ESPI_STATUS_PERIF_NP_FREE;
+    }
+
+    chan->status = status;
+    aspeed_espi_update_status(s);
+}
+
+/*
+ * Hand a message or completion cycle to software through the Posted Rx
+ * queue -- the single dataport that carries both. A completion carries no
+ * address; a Message or Message with Data cycle instead carries a header
+ * of its own -- CYC/TAG/LEN (already broken out into PC_RX_CTRL) plus a
+ * message code byte and a 4-byte Message Specific field -- with the
+ * latter two staged inline ahead of any data. PC_RX_CTRL.LEN keeps reporting
+ * only the data length: neither it nor @len counts the 5-byte message
+ * header.
+ */
+static void aspeed_espi_perif_post_rx(AspeedESPIState *s, uint8_t cyc,
+                                      uint8_t tag, uint64_t addr,
+                                      uint32_t len, const uint8_t *data,
+                                      uint8_t msg_code)
+{
+    uint32_t ctrl = s->regs[TO_REG(ESPI_CH0_CTRL)];
+    bool is_msg = (cyc == ESPI_PERIF_MSG || cyc == ESPI_PERIF_MSG_D);
+    bool has_data = (cyc == ESPI_PERIF_MSG_D ||
+                     cyc == ESPI_PERIF_SUC_CMPLT_D_MIDDLE ||
+                     cyc == ESPI_PERIF_SUC_CMPLT_D_FIRST ||
+                     cyc == ESPI_PERIF_SUC_CMPLT_D_LAST ||
+                     cyc == ESPI_PERIF_SUC_CMPLT_D_ONLY);
+    uint32_t msg_hdr_len = is_msg ? 5 : 0;
+    uint32_t stage_len;
+    uint32_t enc_len;
+    uint32_t i;
+
+    /*
+     * MSG/SUC_CMPLT/UNSUC_CMPLT carry no data; a caller that hands in a
+     * nonzero @len for one of these anyway must not have it copied out of
+     * whatever @data happens to point at.
+     */
+    if (!has_data) {
+        len = 0;
+    }
+    stage_len = msg_hdr_len + len;
+
+    if (stage_len > sizeof(s->perif.rx.buf)) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: %" PRIu32 "-byte cycle truncated to the %zu-byte "
+                      "receive buffer\n",
+                      __func__, stage_len, sizeof(s->perif.rx.buf));
+        stage_len = sizeof(s->perif.rx.buf);
+        len = stage_len - msg_hdr_len;
+    }
+
+    enc_len = (len == ASPEED_ESPI_MAX_PLD) ? 0 : len;
+
+    s->perif.rx.len = stage_len;
+    s->perif.rx.pos = 0;
+    s->perif.rx.cyc = cyc;
+    s->perif.rx.tag = tag;
+    s->perif.rx.pending = true;
+
+    if (is_msg) {
+        s->perif.rx.buf[0] = msg_code;
+        for (i = 0; i < 4; i++) {
+            s->perif.rx.buf[1 + i] = (addr >> (8 * i)) & 0xff;
+        }
+    }
+    if (len && data) {
+        memcpy(s->perif.rx.buf + msg_hdr_len, data, len);
+    }
+
+    s->regs[TO_REG(ESPI_CH0_PC_RX_CTRL)] =
+        ESPI_CYC_SERV_PEND |
+        ((enc_len << 12) & ESPI_CYC_LEN) |
+        ((tag << 8) & ESPI_CYC_TAG) |
+        (cyc & ESPI_CYC_TYPE);
+
+    if ((ctrl & ESPI_CH0_CTRL_PC_RX_DMA_EN) && s->perif.rx.len) {
+        uint64_t dma_addr =
+            ((uint64_t)s->regs[TO_REG(ESPI_CH0_PC_RX_DMAH)] << 32) |
+            s->regs[TO_REG(ESPI_CH0_PC_RX_DMAL)];
+
+        if (!s->dma_mr ||
+            address_space_write(&s->dma_as, dma_addr - s->dma_base,
+                                MEMTXATTRS_UNSPECIFIED, s->perif.rx.buf,
+                                s->perif.rx.len) != MEMTX_OK) {
+            qemu_log_mask(LOG_GUEST_ERROR,
+                          "%s: receive DMA to 0x%" PRIx64 " failed\n",
+                          __func__, dma_addr);
+        }
+    }
+
+    s->regs[TO_REG(ESPI_CH0_INT_STS)] |= ESPI_CH0_INT_STS_PC_RX_CMPLT;
+
+    trace_aspeed_espi_perif_post_rx(cyc, tag, len, msg_code);
+    aspeed_espi_update_irq(s);
+}
+
+/* Software has finished with the cycle in the receive registers. */
+static void aspeed_espi_perif_rx_serviced(AspeedESPIState *s)
+{
+    s->regs[TO_REG(ESPI_CH0_PC_RX_CTRL)] &= ~ESPI_CYC_SERV_PEND;
+    s->perif.rx.len = 0;
+    s->perif.rx.pos = 0;
+    s->perif.rx.pending = false;
+
+    aspeed_espi_perif_update_status(s);
+}
+
+/*
+ * Translate the ASPEED message trigger encoding software writes to ESPI128
+ * into what actually leaves on the wire; every other cycle type already
+ * matches.
+ */
+static uint8_t aspeed_espi_perif_tx_cyc(uint8_t cyc)
+{
+    switch (cyc) {
+    case ESPI_PERIF_MSG_TRIG:
+        return ESPI_PERIF_MSG;
+    case ESPI_PERIF_MSG_D_TRIG:
+        return ESPI_PERIF_MSG_D;
+    default:
+        return cyc;
+    }
+}
+
+/*
+ * The cycle types each transmit control takes: memory writes, completions
+ * and the two message encodings for Posted Tx, memory reads for
+ * Non-Posted Tx.
+ */
+static bool aspeed_espi_perif_tx_cyc_valid(bool np, uint8_t cyc)
+{
+    if (np) {
+        return cyc == ESPI_PERIF_MEMRD32 || cyc == ESPI_PERIF_MEMRD64;
+    }
+
+    switch (cyc) {
+    case ESPI_PERIF_MEMWR32:
+    case ESPI_PERIF_MEMWR64:
+    case ESPI_PERIF_SUC_CMPLT:
+    case ESPI_PERIF_SUC_CMPLT_D_MIDDLE:
+    case ESPI_PERIF_SUC_CMPLT_D_FIRST:
+    case ESPI_PERIF_SUC_CMPLT_D_LAST:
+    case ESPI_PERIF_SUC_CMPLT_D_ONLY:
+    case ESPI_PERIF_MSG_TRIG:
+    case ESPI_PERIF_MSG_D_TRIG:
+        return true;
+    default:
+        return false;
+    }
+}
+
+/*
+ * Software queued a cycle for the target to originate as bus master, on
+ * either ESPI128 (Posted Tx: memory writes and messages) or ESPI138
+ * (Non-Posted Tx: memory reads only). This runs from a guest MMIO write
+ * with the BQL already held, so unlike the flash channel's Tx -- which
+ * always carries a completion this model already owes the controller and
+ * is left for the controller to poll -- nothing is staged for later: the
+ * cycle is handed to the notifier immediately and the trigger self-clears
+ * here. A non-posted read's own completion arrives later as an
+ * ordinary inbound cycle into the Posted Rx queue.
+ *
+ * Neither trigger register carries an address -- ESPI128/ESPI138 are
+ * TRIG/LEN/TAG/CYC only -- so a memory cycle's address is staged at the
+ * head of the DMA/PIO buffer instead, big-endian, and stripped back off
+ * before the remaining payload is handed to hardware. A Message or Message
+ * with Data cycle instead stages a message code byte followed by the
+ * 4-byte Message Specific field, byte i in bits [8*i+7:8*i] --
+ * little-endian, unlike the big-endian memory address, because it is not
+ * an address at all.
+ */
+static void aspeed_espi_perif_tx_trigger(AspeedESPIState *s, bool np,
+                                         uint32_t ctrl)
+{
+    hwaddr ctrl_off = np ? ESPI_CH0_NP_TX_CTRL : ESPI_CH0_PC_TX_CTRL;
+    hwaddr dmal_off = np ? ESPI_CH0_NP_TX_DMAL : ESPI_CH0_PC_TX_DMAL;
+    uint32_t dma_en = np ? ESPI_CH0_CTRL_NP_TX_DMA_EN :
+                           ESPI_CH0_CTRL_PC_TX_DMA_EN;
+    uint32_t err_bit = np ? ESPI_CH0_INT_STS_NP_TX_ERR :
+                            ESPI_CH0_INT_STS_PC_TX_ERR;
+    uint32_t cmplt_bit = np ? ESPI_CH0_INT_STS_NP_TX_CMPLT :
+                              ESPI_CH0_INT_STS_PC_TX_CMPLT;
+    uint32_t len = aspeed_espi_cyc_len(ctrl);
+    uint8_t cyc = aspeed_espi_perif_tx_cyc(ctrl & ESPI_CYC_TYPE);
+    uint8_t tag = (ctrl & ESPI_CYC_TAG) >> 8;
+    uint8_t *staged = np ? s->perif.np_tx.buf : s->perif.pc_tx.buf;
+    uint32_t staged_cap = np ? sizeof(s->perif.np_tx.buf) :
+                               sizeof(s->perif.pc_tx.buf);
+    bool has_data;
+    bool is_msg;
+    uint32_t hdr;
+    uint32_t stage_len;
+    uint64_t addr = 0;
+    uint8_t msg_code = 0;
+    uint32_t i;
+    uint32_t rst_bit = np ? ESPI_CH0_CTRL_NP_TX_RST : ESPI_CH0_CTRL_PC_TX_RST;
+
+    s->regs[TO_REG(ctrl_off)] = ctrl & ~ESPI_CYC_TRIG_PEND;
+
+    if (!(s->regs[TO_REG(ESPI_CH0_CTRL)] & rst_bit)) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: %s trigger while its transmit queue is held in "
+                      "reset\n", __func__, np ? "non-posted" : "posted");
+        return;
+    }
+
+    if (!aspeed_espi_perif_tx_cyc_valid(np, ctrl & ESPI_CYC_TYPE)) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: cycle type 0x%02x is not allowed in the %s "
+                      "transmit control\n", __func__,
+                      (uint8_t)(ctrl & ESPI_CYC_TYPE),
+                      np ? "non-posted" : "posted");
+        return;
+    }
+
+    switch (cyc) {
+    case ESPI_PERIF_MEMRD32:
+    case ESPI_PERIF_MEMWR32:
+        hdr = 4;
+        break;
+    case ESPI_PERIF_MEMRD64:
+    case ESPI_PERIF_MEMWR64:
+        hdr = 8;
+        break;
+    case ESPI_PERIF_MSG:
+    case ESPI_PERIF_MSG_D:
+        hdr = 5; /* msg_code + 4-byte Message Specific field */
+        break;
+    default:
+        hdr = 0; /* a completion carries no address */
+        break;
+    }
+
+    is_msg = (cyc == ESPI_PERIF_MSG || cyc == ESPI_PERIF_MSG_D);
+
+    if (!(s->regs[TO_REG(ESPI_CH0_STS)] & ESPI_CH0_STS_BUS_MASTER_EN)) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: %s cycle 0x%02x triggered with bus mastering "
+                      "disabled\n", __func__, np ? "non-posted" : "posted",
+                      cyc);
+        s->regs[TO_REG(ESPI_CH0_INT_STS)] |= err_bit;
+        aspeed_espi_update_irq(s);
+        return;
+    }
+
+    /*
+     * A read carries only its address; len is the completion size to come.
+     * MSG carries its header but, per its own name, no data; only MSG_D
+     * appends a payload after that header.
+     */
+    has_data = (cyc == ESPI_PERIF_MEMWR32 || cyc == ESPI_PERIF_MEMWR64 ||
+               cyc == ESPI_PERIF_MSG_D ||
+               cyc == ESPI_PERIF_SUC_CMPLT_D_FIRST ||
+               cyc == ESPI_PERIF_SUC_CMPLT_D_MIDDLE ||
+               cyc == ESPI_PERIF_SUC_CMPLT_D_LAST ||
+               cyc == ESPI_PERIF_SUC_CMPLT_D_ONLY);
+    /*
+     * Zero encodes the largest payload only for a cycle that carries data
+     * or, for a read, asks for it; a message or completion without data
+     * has none.
+     */
+    if (!has_data && cyc != ESPI_PERIF_MEMRD32 && cyc != ESPI_PERIF_MEMRD64) {
+        len = 0;
+    }
+    stage_len = hdr + (has_data ? len : 0);
+
+    if (stage_len > staged_cap) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: %" PRIu32 "-byte cycle does not fit the %" PRIu32
+                      "-byte transmit buffer\n", __func__, stage_len,
+                      staged_cap);
+        return;
+    }
+
+    if ((s->regs[TO_REG(ESPI_CH0_CTRL)] & dma_en) && stage_len) {
+        uint64_t dma_addr =
+            ((uint64_t)s->regs[TO_REG(dmal_off + 4)] << 32) |
+            s->regs[TO_REG(dmal_off)];
+
+        if (!s->dma_mr ||
+            address_space_read(&s->dma_as, dma_addr - s->dma_base,
+                               MEMTXATTRS_UNSPECIFIED, staged,
+                               stage_len) != MEMTX_OK) {
+            qemu_log_mask(LOG_GUEST_ERROR,
+                          "%s: transmit DMA from 0x%" PRIx64 " failed\n",
+                          __func__, dma_addr);
+            return;
+        }
+    }
+
+    if (!hdr) {
+        /* A completion has no address to take from the buffer */
+    } else if (is_msg) {
+        msg_code = staged[0];
+        for (i = 0; i < 4; i++) {
+            addr |= (uint64_t)staged[1 + i] << (8 * i);
+        }
+    } else {
+        for (i = 0; i < hdr; i++) {
+            addr = (addr << 8) | staged[i];
+        }
+    }
+
+    trace_aspeed_espi_perif_tx(np, cyc, tag, addr, len, msg_code);
+
+    if (!s->in_ctrl_request && s->notifier && s->notifier->pc_notify) {
+        s->notifier->pc_notify(s->notifier_opaque, cyc, tag, addr, len,
+                               has_data ? staged + hdr : NULL, msg_code);
+    }
+
+    s->regs[TO_REG(ESPI_CH0_INT_STS)] |= cmplt_bit;
+    aspeed_espi_update_irq(s);
 }
 
 /*
@@ -1635,6 +2411,321 @@ bool aspeed_espi_flash_get_completion(AspeedESPIState *s, uint8_t *rsp_cyc,
     return true;
 }
 
+/*
+ * Messages and completions occupy the single Rx slot until software drains
+ * it; memory reads and writes are serviced synchronously in hardware and
+ * never touch that slot at all.
+ */
+static bool aspeed_espi_perif_cyc_queued(uint8_t cyc)
+{
+    switch (cyc) {
+    case ESPI_PERIF_MSG:
+    case ESPI_PERIF_MSG_D:
+    case ESPI_PERIF_SUC_CMPLT:
+    case ESPI_PERIF_SUC_CMPLT_D_MIDDLE:
+    case ESPI_PERIF_SUC_CMPLT_D_FIRST:
+    case ESPI_PERIF_UNSUC_CMPLT_LAST:
+    case ESPI_PERIF_UNSUC_CMPLT_ONLY:
+    case ESPI_PERIF_SUC_CMPLT_D_LAST:
+    case ESPI_PERIF_SUC_CMPLT_D_ONLY:
+        return true;
+    default:
+        return false;
+    }
+}
+
+/*
+ * Match an inbound peripheral address against the two Rx mapping windows and
+ * translate it, mirroring aspeed_espi_flash_map() but across a set of
+ * independent, separately enabled windows rather than one fixed pair. No
+ * window matching is not an error by itself -- the caller decides what an
+ * unmapped memory cycle means.
+ */
+static bool aspeed_espi_perif_map(AspeedESPIState *s, uint64_t addr,
+                                  uint64_t *mapped)
+{
+    int i;
+
+    for (i = 0; i < ASPEED_ESPI_PERIF_NR_WINDOWS; i++) {
+        uint64_t mask = s->perif.window[i].mask;
+
+        if (!s->perif.window[i].enabled) {
+            continue;
+        }
+        if ((addr & mask) == (s->perif.window[i].src & mask)) {
+            *mapped = (addr & ~mask) | (s->perif.window[i].tgt & mask);
+            trace_aspeed_espi_perif_map(i, addr, *mapped);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/*
+ * Dispatch a peripheral-channel cycle offered by the controller. Memory reads
+ * and writes are serviced entirely in hardware through the mapping windows --
+ * the whole point of those windows is that software never sees these. Writes
+ * are posted: nothing is returned to the controller beyond whether the cycle
+ * was accepted at all. Reads answer with a completion carrying the data, or
+ * an unsuccessful completion if the window is disabled, unmapped, or the
+ * target address space rejects the access.
+ *
+ * Message and completion cycles post to the shared Rx queue for software to
+ * collect. Short I/O cycles (IOWR/IORD) go to the LPC block's KCS/PCC path
+ * when one is wired up, and are otherwise answered locally.
+ */
+bool aspeed_espi_perif_cycle(AspeedESPIState *s, uint8_t cyc, uint8_t tag,
+                             uint64_t addr, uint32_t len,
+                             const uint8_t *data, uint8_t msg_code,
+                             uint8_t *rsp_cyc, uint8_t *rsp_data,
+                             uint32_t *rsp_len)
+{
+    uint32_t ctrl = s->regs[TO_REG(ESPI_CH0_CTRL)];
+    uint32_t rsp_cap = rsp_len ? *rsp_len : 0;
+    uint64_t mapped;
+
+    if (rsp_cyc) {
+        *rsp_cyc = 0;
+    }
+    if (rsp_len) {
+        *rsp_len = 0;
+    }
+
+    /*
+     * I/O and memory cycles complete in hardware, so only the cycles that
+     * software receives, messages and completions, need it to be ready.
+     */
+    if (aspeed_espi_perif_cyc_queued(cyc) &&
+        !s->chan[ASPEED_ESPI_CHAN_PERIF].sw_ready) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: cycle 0x%02x while the peripheral channel is not "
+                      "ready\n", __func__, cyc);
+        return false;
+    }
+
+    if (len > ASPEED_ESPI_MAX_PLD) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: cycle of %" PRIu32 " bytes exceeds the %u-byte "
+                      "maximum payload\n", __func__, len, ASPEED_ESPI_MAX_PLD);
+        return false;
+    }
+
+    /*
+     * Messages and completions queue through the single Rx slot; memory
+     * cycles below never do, so they are exempt from this backpressure.
+     */
+    if (aspeed_espi_perif_cyc_queued(cyc) && s->perif.rx.pending) {
+        trace_aspeed_espi_perif_queue_full(cyc);
+        return false;
+    }
+
+    /* Software is holding the Posted Rx queue in reset; nothing to post. */
+    if (aspeed_espi_perif_cyc_queued(cyc) &&
+        !(ctrl & ESPI_CH0_CTRL_PC_RX_RST)) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: cycle 0x%02x while the receive queue is held in "
+                      "reset\n", __func__, cyc);
+        return false;
+    }
+
+    s->in_ctrl_request = true;
+
+    switch (cyc) {
+    case ESPI_PERIF_MEMWR32:
+    case ESPI_PERIF_MEMWR64:
+        if (ctrl & ESPI_CH0_CTRL_MCYC_WR_DIS) {
+            qemu_log_mask(LOG_GUEST_ERROR,
+                          "%s: memory write cycle while mapped writes are "
+                          "disabled, dropping\n", __func__);
+            break;
+        }
+        if (!aspeed_espi_perif_map(s, addr, &mapped)) {
+            qemu_log_mask(LOG_GUEST_ERROR,
+                          "%s: write to 0x%" PRIx64 " matches no mapping "
+                          "window, dropping\n", __func__, addr);
+            break;
+        }
+        if (!s->dma_mr ||
+            address_space_write(&s->dma_as, mapped - s->dma_base,
+                                MEMTXATTRS_UNSPECIFIED, data,
+                                len) != MEMTX_OK) {
+            qemu_log_mask(LOG_GUEST_ERROR,
+                          "%s: write to 0x%" PRIx64 " failed\n", __func__,
+                          mapped);
+            break;
+        }
+        aspeed_espi_mmbi_host_write(s, mapped, len, data);
+        break;
+
+    case ESPI_PERIF_MEMRD32:
+    case ESPI_PERIF_MEMRD64:
+    {
+        g_autofree uint8_t *buf = g_malloc0(len);
+        bool ok = false;
+
+        if (ctrl & ESPI_CH0_CTRL_MCYC_RD_DIS) {
+            qemu_log_mask(LOG_GUEST_ERROR,
+                          "%s: memory read cycle while mapped reads are "
+                          "disabled, answering unsuccessfully\n", __func__);
+        } else if (!aspeed_espi_perif_map(s, addr, &mapped)) {
+            qemu_log_mask(LOG_GUEST_ERROR,
+                          "%s: read of 0x%" PRIx64 " matches no mapping "
+                          "window, answering unsuccessfully\n", __func__,
+                          addr);
+        } else if (!s->dma_mr ||
+                  address_space_read(&s->dma_as, mapped - s->dma_base,
+                                     MEMTXATTRS_UNSPECIFIED, buf,
+                                     len) != MEMTX_OK) {
+            qemu_log_mask(LOG_GUEST_ERROR,
+                          "%s: read of 0x%" PRIx64 " failed, answering "
+                          "unsuccessfully\n", __func__, mapped);
+        } else {
+            ok = true;
+        }
+
+        if (rsp_cyc) {
+            *rsp_cyc = ok ? ESPI_PERIF_SUC_CMPLT_D_ONLY :
+                            ESPI_PERIF_UNSUC_CMPLT_ONLY;
+        }
+        if (ok && rsp_data && rsp_len) {
+            uint32_t n = MIN(len, rsp_cap);
+
+            if (n < len) {
+                qemu_log_mask(LOG_GUEST_ERROR,
+                              "%s: completion of %" PRIu32 " bytes truncated "
+                              "to the caller's %" PRIu32 "-byte buffer\n",
+                              __func__, len, rsp_cap);
+            }
+            memcpy(rsp_data, buf, n);
+            *rsp_len = n;
+        }
+        break;
+    }
+
+    case ESPI_PERIF_MSG:
+    case ESPI_PERIF_MSG_D:
+    case ESPI_PERIF_SUC_CMPLT:
+    case ESPI_PERIF_SUC_CMPLT_D_MIDDLE:
+    case ESPI_PERIF_SUC_CMPLT_D_FIRST:
+    case ESPI_PERIF_UNSUC_CMPLT_LAST:
+    case ESPI_PERIF_UNSUC_CMPLT_ONLY:
+    case ESPI_PERIF_SUC_CMPLT_D_LAST:
+    case ESPI_PERIF_SUC_CMPLT_D_ONLY:
+        aspeed_espi_perif_post_rx(s, cyc, tag, addr, len, data, msg_code);
+        aspeed_espi_perif_update_status(s);
+        break;
+
+    case ESPI_PERIF_IOWR:
+    {
+        uint32_t i;
+
+        for (i = 0; i < len; i++) {
+            if (s->lpc &&
+                aspeed_lpc_kcs_host_write(s->lpc, addr + i, data[i])) {
+                continue;
+            }
+            /*
+             * VUART is tried before Post Code Capture: the capture port
+             * match is a masked range that would otherwise take 0x3F8 (and
+             * any other VUART host window) as a post code byte.
+             */
+            if (s->vuart &&
+                aspeed_vuart_host_write(s->vuart, addr + i, data[i])) {
+                continue;
+            }
+            if (s->lpc) {
+                aspeed_lpc_pcc_capture(s->lpc, addr + i, data[i]);
+            }
+        }
+        if (rsp_cyc) {
+            *rsp_cyc = cyc;
+        }
+        break;
+    }
+
+    case ESPI_PERIF_IORD:
+        /* An unclaimed port floats; real hardware returns all ones. */
+        if (rsp_cyc) {
+            *rsp_cyc = cyc;
+        }
+        if (rsp_data && rsp_len) {
+            uint32_t n = MIN(len, rsp_cap);
+            uint32_t i;
+
+            memset(rsp_data, 0xff, n);
+            for (i = 0; i < n; i++) {
+                if (s->lpc &&
+                    aspeed_lpc_kcs_host_read(s->lpc, addr + i, &rsp_data[i])) {
+                    continue;
+                }
+                if (s->vuart) {
+                    aspeed_vuart_host_read(s->vuart, addr + i, &rsp_data[i]);
+                }
+            }
+            *rsp_len = n;
+        }
+        break;
+
+    default:
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: unsupported peripheral cycle type 0x%02x\n",
+                      __func__, cyc);
+        aspeed_espi_end_ctrl_request(s);
+        return false;
+    }
+
+    trace_aspeed_espi_perif_cycle(cyc, tag, addr, len, msg_code);
+    aspeed_espi_end_ctrl_request(s);
+
+    return true;
+}
+
+/*
+ * ESPI100 bits 31:28 are active low -- reset value 0xf0000350 comes up with
+ * all four set, i.e. released -- so software holds a bit at 0 to keep that
+ * queue in reset and sets it to let the queue run again. Act on the 1->0
+ * edge; the "held at 0" side of each guard lives where the queue is used
+ * (aspeed_espi_perif_post_rx(), aspeed_espi_perif_tx_trigger()).
+ */
+static void aspeed_espi_perif_ctrl_reset(AspeedESPIState *s, uint32_t old,
+                                         uint32_t val)
+{
+    uint32_t fell = old & ~val;
+
+    if ((old ^ val) & ESPI_CH0_CTRL_PC_RX_RST) {
+        aspeed_espi_perif_update_status(s);
+    }
+
+    if (fell & ESPI_CH0_CTRL_PC_RX_RST) {
+        s->perif.rx.pending = false;
+        s->perif.rx.len = 0;
+        s->perif.rx.pos = 0;
+        s->regs[TO_REG(ESPI_CH0_PC_RX_CTRL)] &= ~ESPI_CYC_SERV_PEND;
+        s->regs[TO_REG(ESPI_CH0_INT_STS)] &= ~ESPI_CH0_INT_STS_PC_RX_CMPLT;
+        aspeed_espi_update_irq(s);
+        aspeed_espi_perif_update_status(s);
+    }
+
+    if (fell & ESPI_CH0_CTRL_PC_TX_RST) {
+        s->perif.pc_tx.pos = 0;
+        s->regs[TO_REG(ESPI_CH0_PC_TX_CTRL)] &= ~ESPI_CYC_TRIG_PEND;
+    }
+
+    if (fell & ESPI_CH0_CTRL_NP_TX_RST) {
+        s->perif.np_tx.pos = 0;
+        s->regs[TO_REG(ESPI_CH0_NP_TX_CTRL)] &= ~ESPI_CYC_TRIG_PEND;
+    }
+
+    /*
+     * b30 (Non-Posted Rx reset) has no queue to act on: this model has no
+     * separate Non-Posted Rx dataport -- completions for the BMC's own
+     * reads travel the Posted Rx path above. Aliasing this bit to that
+     * reset would be a guess dressed up as behaviour, so it is left an
+     * explicit no-op.
+     */
+}
+
 /* Track software arming a channel, so channel code never rereads the bit. */
 static void aspeed_espi_chan_ctrl_write(AspeedESPIState *s, int chan,
                                         uint32_t val)
@@ -1651,13 +2742,45 @@ static void aspeed_espi_chan_ctrl_write(AspeedESPIState *s, int chan,
                       info->ctrl_ro, info->name);
     }
     val = (val & ~info->ctrl_ro) | (old & info->ctrl_ro);
+
+    /*
+     * Bits 7 and 5 of the peripheral channel control are set-only. Once set,
+     * each keeps the memory cycle disable bit below it at its value until
+     * the controller is reset.
+     */
+    if (chan == ASPEED_ESPI_CHAN_PERIF) {
+        val |= old & (ESPI_CH0_CTRL_MCYC_RD_LOCK | ESPI_CH0_CTRL_MCYC_WR_LOCK);
+        if (old & ESPI_CH0_CTRL_MCYC_RD_LOCK) {
+            val = (val & ~ESPI_CH0_CTRL_MCYC_RD_DIS) |
+                  (old & ESPI_CH0_CTRL_MCYC_RD_DIS);
+        }
+        if (old & ESPI_CH0_CTRL_MCYC_WR_LOCK) {
+            val = (val & ~ESPI_CH0_CTRL_MCYC_WR_DIS) |
+                  (old & ESPI_CH0_CTRL_MCYC_WR_DIS);
+        }
+    }
     s->regs[TO_REG(reg)] = val;
+
+    if (chan == ASPEED_ESPI_CHAN_PERIF) {
+        aspeed_espi_perif_ctrl_reset(s, old, val);
+    }
 
     if (ready != s->chan[chan].sw_ready) {
         s->chan[chan].sw_ready = ready;
         trace_aspeed_espi_chan_ready(info->name, ready);
         aspeed_espi_config_update_ready(s, chan);
-        aspeed_espi_update_status(s);
+
+        /*
+         * The peripheral channel's contribution to the status word depends
+         * on sw_ready, so it has to be recomputed here rather than left to
+         * aspeed_espi_update_status(), which only ORs together whatever each
+         * channel last cached.
+         */
+        if (chan == ASPEED_ESPI_CHAN_PERIF) {
+            aspeed_espi_perif_update_status(s);
+        } else {
+            aspeed_espi_update_status(s);
+        }
     }
 }
 
@@ -1692,6 +2815,18 @@ static uint64_t aspeed_espi_read(void *opaque, hwaddr offset, unsigned size)
             return 0;
         }
         val = s->flash.rx_buf[s->flash.rx_pos++];
+        trace_aspeed_espi_read(offset, size, val);
+        return val;
+    }
+
+    if (offset == ESPI_CH0_PC_RX_DATA) {
+        if (s->perif.rx.pos >= s->perif.rx.len) {
+            qemu_log_mask(LOG_GUEST_ERROR,
+                          "%s: read past the end of the staged peripheral "
+                          "payload\n", __func__);
+            return 0;
+        }
+        val = s->perif.rx.buf[s->perif.rx.pos++];
         trace_aspeed_espi_read(offset, size, val);
         return val;
     }
@@ -1756,7 +2891,9 @@ static void aspeed_espi_write(void *opaque, hwaddr offset, uint64_t data,
             aspeed_espi_update_irq(s);
             return;
         case ESPI_CHAN_INT_EN:
-            if (chan == ASPEED_ESPI_CHAN_VW) {
+            if (chan == ASPEED_ESPI_CHAN_PERIF) {
+                val &= ESPI_CH0_INT_EN_MASK;
+            } else if (chan == ASPEED_ESPI_CHAN_VW) {
                 val &= MAKE_64BIT_MASK(0, 4);
             } else if (chan == ASPEED_ESPI_CHAN_FLASH) {
                 val &= MAKE_64BIT_MASK(0, 5);
@@ -1805,6 +2942,20 @@ static void aspeed_espi_write(void *opaque, hwaddr offset, uint64_t data,
     case ESPI_CH1_EVT1 + ESPI_EVT_INT_STS:
         s->regs[TO_REG(offset)] &= ~val;
         aspeed_espi_vw_check_levels(s, offset - ESPI_EVT_INT_STS);
+        return;
+
+    case ESPI_MMBI_CTRL:
+        aspeed_espi_mmbi_ctrl_write(s, val);
+        return;
+
+    case ESPI_MMBI_INT_STS:
+        s->regs[TO_REG(offset)] &= ~val;
+        aspeed_espi_mmbi_update_irq(s);
+        return;
+
+    case ESPI_MMBI_INT_EN:
+        s->regs[TO_REG(offset)] = val & ESPI_MMBI_INT_MASK;
+        aspeed_espi_mmbi_update_irq(s);
         return;
 
     case ESPI_FLTR_FIRST ... ESPI_FLTR_LAST:
@@ -1856,6 +3007,84 @@ static void aspeed_espi_write(void *opaque, hwaddr offset, uint64_t data,
     case ESPI_CH3_EDAF_MASKH:
         s->regs[TO_REG(offset)] = val;
         aspeed_espi_flash_update_window(s);
+        return;
+
+    case ESPI_CH0_MAP_FIRST ... (ESPI_CH0_MAP_FIRST +
+                                 ESPI_CH0_MAP_NR_WINDOWS *
+                                 ESPI_CH0_MAP_STRIDE - 4):
+        switch ((offset - ESPI_CH0_MAP_FIRST) % ESPI_CH0_MAP_STRIDE) {
+        case ESPI_CH0_MAP_SRCL:
+        case ESPI_CH0_MAP_TGTL:
+            val &= ESPI_CH0_MAP_ADDRL_MASK;
+            break;
+        case ESPI_CH0_MAP_MASKL:
+            val &= ESPI_CH0_MAP_MASKL_MASK;
+            break;
+        default:
+            break;
+        }
+        s->regs[TO_REG(offset)] = val;
+        aspeed_espi_perif_update_windows(s);
+        return;
+
+    case ESPI_CH0_PC_RX_DMAL:
+    case ESPI_CH0_PC_TX_DMAL:
+    case ESPI_CH0_NP_TX_DMAL:
+        s->regs[TO_REG(offset)] = val & ESPI_CH0_DMAL_MASK;
+        return;
+
+    case ESPI_CH0_PC_RX_CTRL:
+        /*
+         * Software acknowledges the staged cycle by writing the pending bit
+         * back; the rest of the register is hardware's to set.
+         */
+        if (val & ESPI_CYC_SERV_PEND) {
+            aspeed_espi_perif_rx_serviced(s);
+        }
+        return;
+
+    case ESPI_CH0_PC_RX_DATA:
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: write to the read-only peripheral receive FIFO\n",
+                      __func__);
+        return;
+
+    case ESPI_CH0_PC_TX_DATA:
+        if (s->perif.pc_tx.pos >= sizeof(s->perif.pc_tx.buf)) {
+            qemu_log_mask(LOG_GUEST_ERROR,
+                          "%s: peripheral posted transmit FIFO overflow\n",
+                          __func__);
+            return;
+        }
+        s->perif.pc_tx.buf[s->perif.pc_tx.pos++] = val & 0xff;
+        return;
+
+    case ESPI_CH0_PC_TX_CTRL:
+        val &= ESPI_CH0_TX_CTRL_MASK;
+        s->regs[TO_REG(offset)] = val;
+        if (val & ESPI_CYC_TRIG_PEND) {
+            aspeed_espi_perif_tx_trigger(s, false, val);
+            s->perif.pc_tx.pos = 0;
+        }
+        return;
+
+    case ESPI_CH0_NP_TX_DATA:
+        if (s->perif.np_tx.pos >= sizeof(s->perif.np_tx.buf)) {
+            qemu_log_mask(LOG_GUEST_ERROR,
+                          "%s: peripheral non-posted transmit buffer "
+                          "overflow\n", __func__);
+            return;
+        }
+        s->perif.np_tx.buf[s->perif.np_tx.pos++] = val & 0xff;
+        return;
+
+    case ESPI_CH0_NP_TX_CTRL:
+        val &= ESPI_CH0_TX_CTRL_MASK;
+        s->regs[TO_REG(offset)] = val;
+        if (val & ESPI_CYC_TRIG_PEND) {
+            aspeed_espi_perif_tx_trigger(s, true, val);
+            s->perif.np_tx.pos = 0;
+        }
         return;
 
     case ESPI_CH3_RX_CTRL:
@@ -1982,7 +3211,16 @@ static void aspeed_espi_reset_hold(Object *obj, ResetType type)
         s->regs[TO_REG(info->base + ESPI_CHAN_STS)] = info->sts_reset;
     }
 
+    s->regs[TO_REG(ESPI_CH0_MCYC0_MASKL)] = ESPI_CH0_MCYC_MASKL_RESET;
+    s->regs[TO_REG(ESPI_CH0_MCYC0_MASKH)] = ESPI_CH0_MCYC_MASKH_RESET;
+    s->regs[TO_REG(ESPI_CH0_MCYC1_MASKL)] = ESPI_CH0_MCYC_MASKL_RESET;
+    s->regs[TO_REG(ESPI_CH0_MCYC1_MASKH)] = ESPI_CH0_MCYC_MASKH_RESET;
+
     s->regs[TO_REG(ESPI_CH1_EVT0)] = ESPI_CH1_EVT0_RESET;
+    /* The PME# input keeps the level the LPC controller drives */
+    if (s->pme_level) {
+        s->regs[TO_REG(ESPI_CH1_EVT0)] &= ~ESPI_CH1_EVT0_PME;
+    }
 
     s->regs[TO_REG(ESPI_CH3_EDAF_TADDRH)] = ESPI_CH3_TADDRH_RESET;
     s->regs[TO_REG(ESPI_CH3_EDAF_MASKL)] = ESPI_CH3_MASKL_RESET;
@@ -1999,11 +3237,13 @@ static void aspeed_espi_reset_hold(Object *obj, ResetType type)
 
     memset(s->chan, 0, sizeof(s->chan));
     memset(&s->flash, 0, sizeof(s->flash));
+    memset(&s->perif, 0, sizeof(s->perif));
     s->status = ESPI_STATUS_IDLE;
     s->status_shadow = ESPI_STATUS_IDLE;
 
     /* The mapping registers come up describing a window, so honour it. */
     aspeed_espi_flash_update_window(s);
+    aspeed_espi_perif_update_windows(s);
 
     for (i = 0; i < ASPEED_ESPI_NR_CHAN; i++) {
         aspeed_espi_chan_refresh(s, i);
@@ -2032,6 +3272,10 @@ static void aspeed_espi_realize(DeviceState *dev, Error **errp)
 
     qdev_init_gpio_in_named(dev, aspeed_espi_reset_line,
                             ASPEED_ESPI_RESET_GPIO, 1);
+    qdev_init_gpio_in_named(dev, aspeed_espi_vuart_sirq,
+                            ASPEED_ESPI_VUART_SIRQ_GPIO, 1);
+    qdev_init_gpio_in_named(dev, aspeed_espi_lpc_pme,
+                            ASPEED_ESPI_PME_GPIO, 1);
 
     if (s->dma_mr) {
         address_space_init(&s->dma_as, s->dma_mr, "aspeed-espi-dma");
@@ -2049,20 +3293,64 @@ static const VMStateDescription vmstate_aspeed_espi_channel = {
     }
 };
 
+/*
+ * The peripheral mapping windows are a pure derivation of regs[], which
+ * migrates wholesale above -- recompute rather than migrate a second copy.
+ */
 static int aspeed_espi_post_load(void *opaque, int version_id)
 {
     AspeedESPIState *s = opaque;
 
+    aspeed_espi_perif_update_windows(s);
+
     /*
      * IRQ lines are not themselves migrated state -- they are derived from
      * the registers above, which are. Without this a pending interrupt the
-     * migrated INT_STS status implies can go unraised until the next
+     * migrated INT_STS/MMBI status implies can go unraised until the next
      * unrelated event happens to recompute it.
      */
     aspeed_espi_update_irq(s);
+    aspeed_espi_mmbi_update_irq(s);
 
     return 0;
 }
+
+static const VMStateDescription vmstate_aspeed_espi_queue = {
+    .name = "aspeed.espi/queue",
+    .version_id = 1,
+    .minimum_version_id = 1,
+    .fields = (const VMStateField[]) {
+        VMSTATE_UINT8_ARRAY(buf, AspeedESPIQueue,
+                            ASPEED_ESPI_MAX_PLD + ASPEED_ESPI_PERIF_HDR_MAX),
+        VMSTATE_UINT32(len, AspeedESPIQueue),
+        VMSTATE_UINT32(pos, AspeedESPIQueue),
+        VMSTATE_UINT8(cyc, AspeedESPIQueue),
+        VMSTATE_UINT8(tag, AspeedESPIQueue),
+        VMSTATE_BOOL(pending, AspeedESPIQueue),
+        VMSTATE_END_OF_LIST()
+    }
+};
+
+/*
+ * Peripheral channel state in flight. A subsection, so a stream from before
+ * it existed still loads, with the queues empty.
+ */
+static const VMStateDescription vmstate_aspeed_espi_perif = {
+    .name = "aspeed.espi/perif",
+    .version_id = 1,
+    .minimum_version_id = 1,
+    .fields = (const VMStateField[]) {
+        VMSTATE_STRUCT(perif.rx, AspeedESPIState, 1,
+                      vmstate_aspeed_espi_queue, AspeedESPIQueue),
+        VMSTATE_STRUCT(perif.pc_tx, AspeedESPIState, 1,
+                      vmstate_aspeed_espi_queue, AspeedESPIQueue),
+        VMSTATE_UINT8_ARRAY(perif.np_tx.buf, AspeedESPIState, 8),
+        VMSTATE_UINT32(perif.np_tx.pos, AspeedESPIState),
+        VMSTATE_BOOL(sirq_level, AspeedESPIState),
+        VMSTATE_BOOL(pme_level, AspeedESPIState),
+        VMSTATE_END_OF_LIST()
+    }
+};
 
 static const VMStateDescription vmstate_aspeed_espi = {
     .name = TYPE_ASPEED_ESPI,
@@ -2097,6 +3385,10 @@ static const VMStateDescription vmstate_aspeed_espi = {
                              vmstate_aspeed_espi_channel, AspeedESPIChannel),
         VMSTATE_END_OF_LIST()
     },
+    .subsections = (const VMStateDescription * const []) {
+        &vmstate_aspeed_espi_perif,
+        NULL
+    }
 };
 
 static const Property aspeed_espi_properties[] = {
@@ -2124,6 +3416,10 @@ static const Property aspeed_espi_properties[] = {
                      TYPE_MEMORY_REGION, MemoryRegion *),
     DEFINE_PROP_LINK("tafsb", AspeedESPIState, tafsb,
                      TYPE_ASPEED_TAFSB, AspeedTAFSBState *),
+    DEFINE_PROP_LINK("lpc", AspeedESPIState, lpc,
+                     TYPE_ASPEED_LPC, AspeedLPCState *),
+    DEFINE_PROP_LINK("vuart", AspeedESPIState, vuart,
+                     TYPE_ASPEED_VUART, AspeedVUARTState *),
 };
 
 static void aspeed_espi_class_init(ObjectClass *klass, const void *data)

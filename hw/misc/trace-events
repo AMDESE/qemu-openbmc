@@ -327,6 +327,15 @@ aspeed_espi_flash_cpl(uint8_t tag, uint8_t cyc, uint32_t len) "completion tag %u
 aspeed_espi_flash_queue_full(uint32_t pending) "non-posted queue full, %" PRIu32 " pending"
 aspeed_espi_flash_rx_serviced(uint32_t pending) "receive descriptor serviced, %" PRIu32 " pending"
 aspeed_espi_vw_event(uint64_t reg, uint32_t old, uint32_t new, uint32_t raised) "vw event reg 0x%" PRIx64 " 0x%" PRIx32 " -> 0x%" PRIx32 " raised 0x%" PRIx32
+aspeed_espi_perif_window(int index, uint64_t src, uint64_t tgt, uint64_t mask, bool enabled) "perif window %d src 0x%" PRIx64 " target 0x%" PRIx64 " mask 0x%" PRIx64 " enabled %d"
+aspeed_espi_perif_map(int index, uint64_t addr, uint64_t mapped) "perif window %d addr 0x%" PRIx64 " -> 0x%" PRIx64
+aspeed_espi_perif_cycle(uint8_t cyc, uint8_t tag, uint64_t addr, uint32_t len, uint8_t msg_code) "cyc 0x%02x tag 0x%x addr 0x%" PRIx64 " len %" PRIu32 " msg_code 0x%02x"
+aspeed_espi_perif_post_rx(uint8_t cyc, uint8_t tag, uint32_t len, uint8_t msg_code) "cyc 0x%02x tag 0x%x len %" PRIu32 " msg_code 0x%02x"
+aspeed_espi_perif_queue_full(uint8_t cyc) "cyc 0x%02x"
+aspeed_espi_perif_tx(bool np, uint8_t cyc, uint8_t tag, uint64_t addr, uint32_t len, uint8_t msg_code) "np %d cyc 0x%02x tag 0x%x addr 0x%" PRIx64 " len %" PRIu32 " msg_code 0x%02x"
+aspeed_espi_mmbi_ctrl(bool enabled, uint32_t instances) "MMBI enabled %d instances %" PRIu32
+aspeed_espi_mmbi_irq(uint32_t status, uint32_t enable, bool asserted) "MMBI int_sts 0x%" PRIx32 " int_en 0x%" PRIx32 " asserted %d"
+aspeed_espi_mmbi_host_rwp(uint32_t inst, uint32_t half, uint32_t val) "instance %" PRIu32 " half %" PRIu32 " val 0x%" PRIx32
 
 # aspeed_tafsb.c
 aspeed_tafsb_read(uint64_t offset, uint32_t data) "offset 0x%" PRIx64 " data 0x%" PRIx32
