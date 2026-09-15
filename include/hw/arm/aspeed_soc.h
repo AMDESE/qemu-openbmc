@@ -39,6 +39,7 @@
 #include "hw/misc/aspeed_espi.h"
 #include "hw/misc/aspeed_tafsb.h"
 #include "hw/misc/aspeed_tafsc.h"
+#include "hw/char/aspeed_vuart.h"
 #include "hw/sd/aspeed_sdhci.h"
 #include "hw/usb/hcd-ehci.h"
 #include "qom/object.h"
@@ -66,6 +67,8 @@
 #define ASPEED_INTC_NUM  2
 #define ASPEED_IOEXP_NUM 2
 #define ASPEED_ESPI_NUM  2
+/* Four VUARTs; the first and third are linked into an eSPI controller */
+#define ASPEED_VUART_NUM 4
 
 struct AspeedSoCState {
     DeviceState parent;
@@ -162,6 +165,9 @@ struct Aspeed27x0SoCState {
     AspeedESPIState espi[ASPEED_ESPI_NUM];
     AspeedTAFSBState tafsb[ASPEED_ESPI_NUM];
     AspeedTAFSCState tafsc;
+    /* LPC controller of the second eSPI controller */
+    AspeedLPCState lpc1;
+    AspeedVUARTState vuart[ASPEED_VUART_NUM];
 };
 
 #define TYPE_ASPEED27X0_SOC "aspeed27x0-soc"
@@ -308,6 +314,21 @@ enum {
     ASPEED_DEV_TAFSB0,
     ASPEED_DEV_TAFSB1,
     ASPEED_DEV_TAFSC,
+    /*
+     * An eSPI controller raises a second interrupt for its memory buffer
+     * interface, at a line of its own.
+     */
+    ASPEED_DEV_ESPI_MMBI,
+    ASPEED_DEV_ESPI1_MMBI,
+    /* The AST2700 VUARTs, each with its own interrupt */
+    ASPEED_DEV_VUART0,
+    ASPEED_DEV_VUART1,
+    ASPEED_DEV_VUART2,
+    ASPEED_DEV_VUART3,
+    ASPEED_DEV_PCC,
+    ASPEED_DEV_LPC1,
+    ASPEED_DEV_LPC1_PCC,
+    ASPEED_DEV_LPC1_KCS,
     ASPEED_DEV_IOEXP0_I2C,
     ASPEED_DEV_IOEXP1_I2C,
     ASPEED_DEV_IOEXP0_INTCIO,

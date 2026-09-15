@@ -79,6 +79,12 @@ static const hwaddr aspeed_soc_ast2700_memmap[] = {
     [ASPEED_DEV_SLIIO]     =  0x14C1E000,
     [ASPEED_DEV_I3C]       =  0x14C20000,
     [ASPEED_DEV_VUART]     =  0x14C30000,
+    [ASPEED_DEV_VUART0]    =  0x14C30000,
+    [ASPEED_DEV_VUART1]    =  0x14C30100,
+    [ASPEED_DEV_VUART2]    =  0x14C30200,
+    [ASPEED_DEV_VUART3]    =  0x14C30300,
+    [ASPEED_DEV_LPC]       =  0x14C31000,
+    [ASPEED_DEV_LPC1]      =  0x14C32000,
     [ASPEED_DEV_UART0]     =  0x14C33000,
     [ASPEED_DEV_UART1]     =  0x14C33100,
     [ASPEED_DEV_UART2]     =  0x14C33200,
@@ -138,12 +144,22 @@ static const int aspeed_soc_ast2700a1_irqmap[] = {
     [ASPEED_DEV_LPC]       = 192,
     [ASPEED_DEV_IBT]       = 192,
     [ASPEED_DEV_KCS]       = 192,
+    [ASPEED_DEV_PCC]       = 192,
+    [ASPEED_DEV_LPC1]      = 193,
+    [ASPEED_DEV_LPC1_PCC]  = 193,
+    [ASPEED_DEV_LPC1_KCS]  = 193,
     [ASPEED_DEV_LTPI_GPIO0] = 192,
     [ASPEED_DEV_LTPI_GPIO1] = 193,
     [ASPEED_DEV_UART13]    = 192,
     [ASPEED_DEV_UART14]    = 193,
     [ASPEED_DEV_ESPI]      = 192,
     [ASPEED_DEV_ESPI1]     = 193,
+    [ASPEED_DEV_ESPI_MMBI] = 192,
+    [ASPEED_DEV_ESPI1_MMBI] = 193,
+    [ASPEED_DEV_VUART0]    = 192,
+    [ASPEED_DEV_VUART1]    = 192,
+    [ASPEED_DEV_VUART2]    = 193,
+    [ASPEED_DEV_VUART3]    = 193,
     [ASPEED_DEV_I2C]       = 194,
     [ASPEED_DEV_ADC]       = 194,
     [ASPEED_DEV_GPIO]      = 194,
@@ -183,17 +199,33 @@ static const int aspeed_soc_ast2700a1_irqmap[] = {
 static const int ast2700_gic192_intcmap[] = {
     [ASPEED_DEV_LPC]       = 0,
     [ASPEED_DEV_IBT]       = 2,
+    [ASPEED_DEV_PCC]       = 3,
     [ASPEED_DEV_KCS]       = 4,
     [ASPEED_DEV_ESPI]      = 10,
+    [ASPEED_DEV_ESPI_MMBI] = 16,
+    [ASPEED_DEV_VUART0]    = 17,
+    [ASPEED_DEV_VUART1]    = 18,
     [ASPEED_DEV_LTPI_GPIO0] = 22,
     [ASPEED_DEV_UART13]    = 23,
 };
 
 /* GICINT 193 */
 static const int ast2700_gic193_intcmap[] = {
+    [ASPEED_DEV_LPC1]      = 0,
+    [ASPEED_DEV_LPC1_PCC]  = 3,
+    [ASPEED_DEV_LPC1_KCS]  = 4,
     [ASPEED_DEV_ESPI1]     = 10,
+    [ASPEED_DEV_ESPI1_MMBI] = 16,
+    [ASPEED_DEV_VUART2]    = 17,
+    [ASPEED_DEV_VUART3]    = 18,
     [ASPEED_DEV_LTPI_GPIO1] = 22,
     [ASPEED_DEV_UART14]    = 23,
+};
+
+/* LPC controller, Post Code Capture and first KCS interrupt of each */
+static const int aspeed_lpc_dev[][3] = {
+    { ASPEED_DEV_LPC, ASPEED_DEV_PCC, ASPEED_DEV_KCS },
+    { ASPEED_DEV_LPC1, ASPEED_DEV_LPC1_PCC, ASPEED_DEV_LPC1_KCS },
 };
 
 /* GICINT 194 */
@@ -575,6 +607,12 @@ static void aspeed_soc_ast2700_init(Object *obj)
                                 TYPE_ASPEED_TAFSB);
     }
     object_initialize_child(obj, "tafsc", &a->tafsc, TYPE_ASPEED_TAFSC);
+    for (i = 0; i < ASPEED_VUART_NUM; i++) {
+        object_initialize_child(obj, "vuart[*]", &a->vuart[i],
+                                TYPE_ASPEED_VUART);
+    }
+    object_initialize_child(obj, "lpc", &s->lpc, TYPE_ASPEED_LPC);
+    object_initialize_child(obj, "lpc1", &a->lpc1, TYPE_ASPEED_LPC);
 
     for (i = 0; i < sc->ioexp_num; i++) {
         /* AST1700 IOEXP */
@@ -1143,6 +1181,46 @@ static void aspeed_soc_ast2700_realize(DeviceState *dev, Error **errp)
                         sc->memmap[ASPEED_DEV_TAFSB0 + i]);
     }
 
+    /* One LPC controller, with KCS and post code capture, per eSPI target */
+    for (i = 0; i < ARRAY_SIZE(aspeed_lpc_dev); i++) {
+        AspeedLPCState *lpc = i ? &a->lpc1 : &s->lpc;
+        const int *lpc_dev = aspeed_lpc_dev[i];
+        int j;
+
+        object_property_set_int(OBJECT(lpc), "dma-base",
+                                sc->memmap[ASPEED_DEV_SDRAM], &error_abort);
+        object_property_set_link(OBJECT(lpc), "dma", OBJECT(s->dram_mr),
+                                 &error_abort);
+        if (!sysbus_realize(SYS_BUS_DEVICE(lpc), errp)) {
+            return;
+        }
+        aspeed_mmio_map(s->memory, SYS_BUS_DEVICE(lpc), 0,
+                        sc->memmap[lpc_dev[0]]);
+        sysbus_connect_irq(SYS_BUS_DEVICE(lpc), 0,
+                           aspeed_soc_ast2700_get_irq(s, lpc_dev[0]));
+        sysbus_connect_irq(SYS_BUS_DEVICE(lpc), 1 + aspeed_lpc_pcc,
+                           aspeed_soc_ast2700_get_irq(s, lpc_dev[1]));
+        for (j = 0; j < ASPEED_LPC_NR_KCS_CHANS; j++) {
+            sysbus_connect_irq(SYS_BUS_DEVICE(lpc), 1 + aspeed_lpc_kcs_1 + j,
+                               aspeed_soc_ast2700_get_irq_index(s, lpc_dev[2],
+                                                                j));
+        }
+    }
+
+    /* The VUARTs; the eSPI controllers below link to the first and third */
+    for (i = 0; i < ASPEED_VUART_NUM; i++) {
+        SysBusDevice *vuart = SYS_BUS_DEVICE(&a->vuart[i]);
+
+        if (!sysbus_realize(vuart, errp)) {
+            return;
+        }
+        aspeed_mmio_map(s->memory, vuart, 0,
+                        sc->memmap[ASPEED_DEV_VUART0 + i]);
+        sysbus_connect_irq(vuart, 0,
+                           aspeed_soc_ast2700_get_irq(s,
+                                                      ASPEED_DEV_VUART0 + i));
+    }
+
     /* eSPI controllers; flash cycles in hardware mode go through a bridge */
     for (i = 0; i < ASPEED_ESPI_NUM; i++) {
         SysBusDevice *espi = SYS_BUS_DEVICE(&a->espi[i]);
@@ -1154,11 +1232,29 @@ static void aspeed_soc_ast2700_realize(DeviceState *dev, Error **errp)
                                  &error_abort);
         object_property_set_link(OBJECT(espi), "tafsb",
                                  OBJECT(&a->tafsb[i]), &error_abort);
+        object_property_set_link(OBJECT(espi), "lpc",
+                                 OBJECT(i ? &a->lpc1 : &s->lpc), &error_abort);
+        object_property_set_link(OBJECT(espi), "vuart",
+                                 OBJECT(&a->vuart[i * 2]), &error_abort);
         if (!sysbus_realize(espi, errp)) {
             return;
         }
         aspeed_mmio_map(s->memory, espi, 0, sc->memmap[espi_dev]);
-        sysbus_connect_irq(espi, 0, aspeed_soc_ast2700_get_irq(s, espi_dev));
+        sysbus_connect_irq(espi, ASPEED_ESPI_IRQ_MAIN,
+                           aspeed_soc_ast2700_get_irq(s, espi_dev));
+        sysbus_connect_irq(espi, ASPEED_ESPI_IRQ_MMBI,
+                           aspeed_soc_ast2700_get_irq(s, i ?
+                                                      ASPEED_DEV_ESPI1_MMBI :
+                                                      ASPEED_DEV_ESPI_MMBI));
+        sysbus_connect_irq(SYS_BUS_DEVICE(&a->vuart[i * 2]), 1,
+                           qdev_get_gpio_in_named(DEVICE(espi),
+                                                  ASPEED_ESPI_VUART_SIRQ_GPIO,
+                                                  0));
+        qdev_connect_gpio_out_named(DEVICE(i ? &a->lpc1 : &s->lpc),
+                                    ASPEED_LPC_PME_GPIO, 0,
+                                    qdev_get_gpio_in_named(DEVICE(espi),
+                                                       ASPEED_ESPI_PME_GPIO,
+                                                       0));
     }
 
     /* IO Expander */

@@ -329,7 +329,9 @@ Supported devices
  * PECI Controller (minimal)
  * I3C Controller
  * LTPI GPIO Controller
- * eSPI Controller (virtual wire and flash channels)
+ * eSPI Controller (peripheral, virtual wire and flash channels, memory
+   buffer interface)
+ * Virtual UART
  * Internal Bridge Controller (SLI dummy)
 
 Missing devices
@@ -341,7 +343,6 @@ Missing devices
  * Graphic Display Controller
  * MCTP Controller
  * Mailbox Controller
- * Virtual UART
 
 Boot options
 ------------
