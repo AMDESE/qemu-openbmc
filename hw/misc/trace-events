@@ -301,6 +301,10 @@ aspeed_pwm_write(uint64_t offset, uint64_t data) "write: offset 0x%" PRIx64 " da
 aspeed_sdmc_write(uint64_t reg, uint64_t data) "reg @0x%" PRIx64 " data: 0x%" PRIx64
 aspeed_sdmc_read(uint64_t reg, uint64_t data) "reg @0x%" PRIx64 " data: 0x%" PRIx64
 
+# aspeed_lpc.c
+aspeed_lpc_kcs_host_write(int channel, uint32_t port, uint8_t byte) "channel %d port 0x%" PRIx32 " byte 0x%02x"
+aspeed_lpc_kcs_host_read(int channel, uint32_t port, uint8_t byte) "channel %d port 0x%" PRIx32 " byte 0x%02x"
+
 # aspeed_espi.c
 aspeed_espi_read(uint64_t offset, unsigned size, uint32_t data) "offset 0x%" PRIx64 " size %u data 0x%" PRIx32
 aspeed_espi_write(uint64_t offset, unsigned size, uint32_t data) "offset 0x%" PRIx64 " size %u data 0x%" PRIx32
