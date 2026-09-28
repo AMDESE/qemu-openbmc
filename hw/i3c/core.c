@@ -8,6 +8,7 @@
 
 #include "qemu/osdep.h"
 #include "qemu/log.h"
+#include "qemu/main-loop.h"
 #include "qapi/error.h"
 #include "trace.h"
 #include "hw/i3c/i3c.h"
@@ -64,6 +65,15 @@ I3CBus *i3c_init_bus_type(const char *type, DeviceState *parent,
 bool i3c_bus_busy(I3CBus *bus)
 {
     return !QLIST_EMPTY(&bus->current_devs);
+}
+
+bool i3c_bus_release_bql(I3CBus *bus)
+{
+    if (!bus->xfer_may_block || !bql_locked()) {
+        return false;
+    }
+    bql_unlock();
+    return true;
 }
 
 static bool i3c_target_match(I3CTarget *candidate, uint8_t address,
