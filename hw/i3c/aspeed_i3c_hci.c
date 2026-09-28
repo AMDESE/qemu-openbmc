@@ -87,6 +87,10 @@ REG32(INHOUSE_INTR_SUM_STATUS, 0xf0)
     FIELD(INHOUSE_INTR_SUM_STATUS, INHOUSE, 3, 1)
 REG32(INHOUSE_INTR_RENEW, 0xf4)
 
+/* Argument of an AUTOCMD job */
+FIELD(AUTOCMD_JOB, DA, 0, 7)
+FIELD(AUTOCMD_JOB, LEN, 8, 8)
+
 /* Responses to AUTOCMD reads carry this transaction ID. */
 #define AUTOCMD_TID                   0xf
 
@@ -253,15 +257,18 @@ static void aspeed_i3c_hci_post_cmd(MIPII3CHCIState *s, bool ok, bool is_read)
 }
 
 /*
- * AUTOCMD read: read @len bytes from the device at @da and queue them with
- * a response of transaction ID AUTOCMD_TID.
+ * AUTOCMD read, run as a job on the command thread: read LEN bytes from
+ * the device at DA and queue them with a response of transaction ID
+ * AUTOCMD_TID.
  */
-static void aspeed_i3c_hci_autocmd(MIPII3CHCIState *s, uint8_t da,
-                                   uint32_t len)
+static void aspeed_i3c_hci_autocmd(MIPII3CHCIState *s, uint32_t arg,
+                                   uint32_t gen)
 {
     AspeedI3CHCICtrl *c = ASPEED_I3C_HCI_CTRL(s);
+    uint8_t da = FIELD_EX32(arg, AUTOCMD_JOB, DA);
     uint8_t rx_buf[MIPI_I3C_HCI_TX_BUF_SIZE];
-    uint32_t read_len = MIN(len, (uint32_t)sizeof(rx_buf));
+    uint32_t read_len = MIN(FIELD_EX32(arg, AUTOCMD_JOB, LEN),
+                            (uint32_t)sizeof(rx_buf));
     uint32_t got = 0;
     uint32_t resp;
     bool ok;
@@ -271,6 +278,9 @@ static void aspeed_i3c_hci_autocmd(MIPII3CHCIState *s, uint8_t da,
     } else {
         ok = i3c_recv(s->bus, rx_buf, read_len, &got) == 0;
         i3c_end_transfer(s->bus);
+    }
+    if (s->generation != gen) {
+        return;
     }
 
     if (!ok) {
@@ -287,7 +297,10 @@ static void aspeed_i3c_hci_autocmd(MIPII3CHCIState *s, uint8_t da,
     ARRAY_FIELD_DP32(c->inhouse_regs, INHOUSE_INTR_STATUS, READ_DONE, 1);
 }
 
-/* Run the AUTOCMD read of every enabled slot of the IBI's source. */
+/*
+ * For every enabled AUTOCMD read slot of the IBI's source, queue the read
+ * as a job: an IBI can arrive in the middle of a command.
+ */
 static void aspeed_i3c_hci_post_ibi(MIPII3CHCIState *s, uint8_t da)
 {
     AspeedI3CHCICtrl *c = ASPEED_I3C_HCI_CTRL(s);
@@ -303,6 +316,7 @@ static void aspeed_i3c_hci_post_ibi(MIPII3CHCIState *s, uint8_t da)
         uint32_t w0 = c->inhouse_regs[R_INHOUSE_AUTOCMD_0 +
                                       n * INHOUSE_AUTOCMD_SLOT_SIZE / 4];
         uint32_t len = FIELD_EX32(w0, INHOUSE_AUTOCMD_0, LEN);
+        uint32_t arg = 0;
 
         if (!FIELD_EX32(w0, INHOUSE_AUTOCMD_0, ENABLE) ||
             FIELD_EX32(w0, INHOUSE_AUTOCMD_0, DA) != da ||
@@ -310,7 +324,13 @@ static void aspeed_i3c_hci_post_ibi(MIPII3CHCIState *s, uint8_t da)
             continue;
         }
 
-        aspeed_i3c_hci_autocmd(s, da, len);
+        arg = FIELD_DP32(arg, AUTOCMD_JOB, DA, da);
+        arg = FIELD_DP32(arg, AUTOCMD_JOB, LEN, len);
+        if (!mipi_i3c_hci_queue_job(s, arg)) {
+            qemu_log_mask(LOG_GUEST_ERROR,
+                          "%s: i3c%u AUTOCMD for 0x%02x dropped, too many "
+                          "pending\n", __func__, s->id, da);
+        }
     }
 }
 
@@ -369,6 +389,7 @@ static void aspeed_i3c_hci_ctrl_class_init(ObjectClass *klass,
     mc->entdaa_next_da = aspeed_i3c_hci_entdaa_next_da;
     mc->post_cmd = aspeed_i3c_hci_post_cmd;
     mc->post_ibi = aspeed_i3c_hci_post_ibi;
+    mc->run_job = aspeed_i3c_hci_autocmd;
 }
 
 static void aspeed_i3c_hci_instance_init(Object *obj)

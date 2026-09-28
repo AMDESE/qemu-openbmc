@@ -19,6 +19,7 @@
 #include "hw/core/sysbus.h"
 #include "hw/core/registerfields.h"
 #include "hw/i3c/i3c.h"
+#include "qemu/thread.h"
 #include "qom/object.h"
 
 #define TYPE_MIPI_I3C_HCI "mipi-i3c-hci"
@@ -59,6 +60,15 @@ OBJECT_DECLARE_TYPE(MIPII3CHCIState, MIPII3CHCIClass, MIPI_I3C_HCI)
 #define MIPI_I3C_HCI_RX_FIFO_DWORDS   64
 #define MIPI_I3C_HCI_IBI_FIFO_SIZE    32
 #define MIPI_I3C_HCI_TX_BUF_SIZE      512
+/*
+ * Commands accepted ahead of the one executing.  One fewer than the response
+ * queue holds, so the responses of every accepted command always fit.
+ */
+#define MIPI_I3C_HCI_CMD_QUEUE_SIZE   (MIPI_I3C_HCI_RESP_FIFO_SIZE - 1)
+/* Controller-initiated work (e.g. an automatic read) waiting to run. */
+#define MIPI_I3C_HCI_JOB_QUEUE_SIZE   8
+/* Default time a command gets on the bus; see the cmd-timeout-ms property. */
+#define MIPI_I3C_HCI_CMD_TIMEOUT_MS   400
 
 /* Response descriptor */
 FIELD(MIPI_I3C_HCI_RESP, DATA_LEN, 0, 22)
@@ -80,6 +90,15 @@ static inline uint32_t mipi_i3c_hci_resp(uint32_t status, uint32_t tid,
     resp = FIELD_DP32(resp, MIPI_I3C_HCI_RESP, TID, tid);
     return FIELD_DP32(resp, MIPI_I3C_HCI_RESP, DATA_LEN, data_len);
 }
+
+/* A command accepted from the command queue port, with its TX data. */
+typedef struct MIPII3CHCICmd {
+    uint32_t w0;
+    uint32_t w1;
+    uint8_t  tx_buf[MIPI_I3C_HCI_TX_BUF_SIZE];
+    uint32_t tx_len;
+    int64_t  deadline_ms;   /* QEMU_CLOCK_VIRTUAL */
+} MIPII3CHCICmd;
 
 /**
  * struct MIPII3CHCIState - generic MIPI I3C HCI controller state
@@ -130,6 +149,28 @@ struct MIPII3CHCIState {
     uint8_t  ibi_mdb;
     bool     ibi_has_mdb;
 
+    /*
+     * Command engine.  Commands and jobs run in order on cmd_thread, with
+     * the BQL held except while a target waits on something outside QEMU.
+     * Everything below is protected by the BQL.
+     */
+    QemuThread    cmd_thread;
+    QemuCond      cmd_cond;     /* work queued, response room, or stop */
+    bool          cmd_stop;     /* unrealize: the thread exits */
+    MIPII3CHCICmd cmd_queue[MIPI_I3C_HCI_CMD_QUEUE_SIZE];
+    uint32_t      cmd_head;
+    uint32_t      cmd_count;
+    bool          cmd_running;
+    uint32_t      jobs[MIPI_I3C_HCI_JOB_QUEUE_SIZE];   /* run_job() args */
+    uint32_t      job_head;
+    uint32_t      job_count;
+    bool          job_running;
+    /*
+     * Bumped whenever a reset or abort discards the queues: a command or
+     * job that was running across it leaves no trace.
+     */
+    uint32_t      generation;
+    uint32_t      cmd_timeout_ms;
 };
 
 /**
@@ -201,8 +242,21 @@ struct MIPII3CHCIClass {
     uint8_t  (*entdaa_next_da)(MIPII3CHCIState *s, uint8_t dev_idx_base,
                                 uint8_t iter);
 
-    /* Called after an IBI is queued. */
+    /*
+     * Called after an IBI is queued.  It must not start bus transfers
+     * itself, since an IBI can arrive while a command is on the bus; queue
+     * them with mipi_i3c_hci_queue_job() instead.
+     */
     void     (*post_ibi)(MIPII3CHCIState *s, uint8_t da);
+
+    /*
+     * Run a job queued with mipi_i3c_hci_queue_job(): work the controller
+     * starts on its own, run on the command thread between commands.  @gen
+     * is the generation the job was started in; the job must not touch
+     * guest-visible state if s->generation has moved on since.  Required
+     * by a subclass that queues jobs.
+     */
+    void     (*run_job)(MIPII3CHCIState *s, uint32_t arg, uint32_t gen);
 
     /*
      * Called when a command completes, for vendor "transfer done" status.
@@ -225,10 +279,17 @@ bool mipi_i3c_hci_inject_ibi(MIPII3CHCIState *s, uint8_t da,
                               uint8_t ibi_byte, bool has_byte);
 
 /*
- * Complete a read the controller started on its own, such as an automatic
- * read after an IBI, as a command completes: queue @rx and @resp and update
- * the PIO status.  If @rx does not fit in the RX queue, none of it is queued
- * and the response reports an overflow instead.
+ * Queue controller-initiated work for the class's run_job() to do on the
+ * command thread.  Returns false if the job queue is full.  Call with the
+ * BQL held.
+ */
+bool mipi_i3c_hci_queue_job(MIPII3CHCIState *s, uint32_t arg);
+
+/*
+ * Complete a read started by a job, as a command completes: queue @rx and
+ * @resp and update the PIO status.  If @rx does not fit in the RX queue,
+ * none of it is queued and the response reports an overflow instead.  Call
+ * from the job, with the BQL held.
  */
 void mipi_i3c_hci_complete_autocmd(MIPII3CHCIState *s, const uint8_t *rx,
                                    uint32_t rx_len, uint32_t resp);

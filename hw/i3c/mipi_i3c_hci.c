@@ -20,6 +20,8 @@
 
 #include "qemu/osdep.h"
 #include "qemu/log.h"
+#include "qemu/main-loop.h"
+#include "qemu/timer.h"
 #include "hw/core/irq.h"
 #include "hw/core/qdev-properties.h"
 #include "hw/core/registerfields.h"
@@ -192,6 +194,8 @@ static uint32_t mipi_i3c_hci_pop_resp(MIPII3CHCIState *s)
     if (s->resp_rd == s->resp_wr) {
         s->pio_regs[R_PIO_INTR_STATUS] &= ~R_PIO_INTR_STATUS_RESP_READY_MASK;
     }
+    /* The command engine may be waiting for room in the response queue. */
+    qemu_cond_signal(&s->cmd_cond);
     return resp;
 }
 
@@ -414,6 +418,37 @@ static bool mipi_i3c_hci_ccc_xfer(MIPII3CHCIState *s, uint8_t ccc_id,
     return true;
 }
 
+/*
+ * Command processing.
+ *
+ * Commands are accepted by the command queue port and run in order on the
+ * controller's command thread, as the hardware works through its command
+ * queue while software gets on with other things.  A command runs in two
+ * steps: mipi_i3c_hci_run_cmd() does the bus traffic, which may release
+ * the BQL while a target waits on something outside QEMU, and collects
+ * what the command leaves behind; mipi_i3c_hci_finish_cmd() then applies
+ * it all at once, unless a reset or abort has intervened.
+ */
+typedef struct MIPII3CHCIResult {
+    uint32_t resp;
+    bool     roc;
+    bool     completed;
+    bool     ok;
+    bool     rnw;
+    uint8_t  rx[MIPI_I3C_HCI_TX_BUF_SIZE];
+    uint32_t rx_len;
+    bool     clear_dat_dct;             /* broadcast RSTDAA */
+    uint32_t dct[MIPI_I3C_HCI_DCT_NR_REGS];
+    uint32_t dct_words;                 /* leading words of dct[] to write */
+} MIPII3CHCIResult;
+
+static void mipi_i3c_hci_result_rx(MIPII3CHCIResult *res, const uint8_t *buf,
+                                   uint32_t len)
+{
+    memcpy(res->rx, buf, len);
+    res->rx_len = len;
+}
+
 /* Inline data of an IMMEDIATE command: up to 4 bytes in W1. */
 static uint32_t mipi_i3c_hci_imm_data(uint32_t w0, uint32_t w1, uint8_t *buf)
 {
@@ -426,10 +461,12 @@ static uint32_t mipi_i3c_hci_imm_data(uint32_t w0, uint32_t w1, uint8_t *buf)
     return len;
 }
 
-static void mipi_i3c_hci_process_cmd(MIPII3CHCIState *s, uint32_t w0,
-                                     uint32_t w1)
+static void mipi_i3c_hci_run_cmd(MIPII3CHCIState *s, const MIPII3CHCICmd *cmd,
+                                 MIPII3CHCIResult *res)
 {
     MIPII3CHCIClass *klass = MIPI_I3C_HCI_GET_CLASS(s);
+    uint32_t w0 = cmd->w0;
+    uint32_t w1 = cmd->w1;
     uint8_t attr = FIELD_EX32(w0, CMD0, ATTR);
     uint8_t tid = FIELD_EX32(w0, CMD0, TID);
     uint8_t dev_idx = FIELD_EX32(w0, CMD0, DEV_INDEX);
@@ -474,13 +511,12 @@ static void mipi_i3c_hci_process_cmd(MIPII3CHCIState *s, uint32_t w0,
                 buf_len = mipi_i3c_hci_imm_data(w0, w1, ccc_buf);
             } else {
                 buf_len = MIN((uint32_t)data_len, sizeof(ccc_buf));
-                if (!rnw && s->tx_len > 0) {
-                    memcpy(ccc_buf, s->tx_buf, MIN(s->tx_len, buf_len));
+                if (!rnw && cmd->tx_len > 0) {
+                    memcpy(ccc_buf, cmd->tx_buf, MIN(cmd->tx_len, buf_len));
                 } else {
                     memset(ccc_buf, 0, buf_len);
                 }
             }
-            s->tx_len = 0;
 
             ok = mipi_i3c_hci_ccc_xfer(s, ccc_id, rnw, target, ccc_buf,
                                        buf_len, &got);
@@ -488,10 +524,9 @@ static void mipi_i3c_hci_process_cmd(MIPII3CHCIState *s, uint32_t w0,
                 buf_len = got;
             }
             if (rnw && ok && buf_len > 0) {
-                mipi_i3c_hci_push_rx(s, ccc_buf, buf_len);
+                mipi_i3c_hci_result_rx(res, ccc_buf, buf_len);
                 actual_len = buf_len;
             }
-            mipi_i3c_hci_check_thresholds(s);
             resp = mipi_i3c_hci_resp(ok ? MIPI_I3C_HCI_RESP_SUCCESS :
                                      MIPI_I3C_HCI_RESP_ERR_ADDR_HEADER,
                                      tid, actual_len);
@@ -503,7 +538,6 @@ static void mipi_i3c_hci_process_cmd(MIPII3CHCIState *s, uint32_t w0,
             uint8_t imm_buf[4];
             uint32_t imm_len = mipi_i3c_hci_imm_data(w0, w1, imm_buf);
 
-            s->tx_len = 0;
             if (imm_len > 0) {
                 ok = mipi_i3c_hci_write_data(s, dev_idx, da, imm_buf, imm_len);
             }
@@ -523,8 +557,7 @@ static void mipi_i3c_hci_process_cmd(MIPII3CHCIState *s, uint32_t w0,
                                             &got);
                 if (ok) {
                     actual_len = got;
-                    mipi_i3c_hci_push_rx(s, rx_buf, got);
-                    mipi_i3c_hci_check_thresholds(s);
+                    mipi_i3c_hci_result_rx(res, rx_buf, got);
                 }
             }
             resp = mipi_i3c_hci_resp(ok ? MIPI_I3C_HCI_RESP_SUCCESS :
@@ -537,13 +570,12 @@ static void mipi_i3c_hci_process_cmd(MIPII3CHCIState *s, uint32_t w0,
              * DATA_LEN bytes: a payload checksum computed over the declared
              * length would fail with the padding on the wire.
              */
-            uint32_t wlen = MIN(s->tx_len, (uint32_t)data_len);
+            uint32_t wlen = MIN(cmd->tx_len, (uint32_t)data_len);
 
             if (wlen > 0) {
-                ok = mipi_i3c_hci_write_data(s, dev_idx, da, s->tx_buf, wlen);
+                ok = mipi_i3c_hci_write_data(s, dev_idx, da, cmd->tx_buf,
+                                             wlen);
             }
-            s->tx_len = 0;
-            mipi_i3c_hci_check_thresholds(s);
             resp = mipi_i3c_hci_resp(ok ? MIPI_I3C_HCI_RESP_SUCCESS :
                                      MIPI_I3C_HCI_RESP_ERR_NACK, tid, 0);
         }
@@ -596,15 +628,16 @@ static void mipi_i3c_hci_process_cmd(MIPII3CHCIState *s, uint32_t w0,
 
             /* The 48-bit PID comes first, most significant byte first. */
             pid = ldq_be_p(pbcr_dcr) >> 16;
-            s->dct[assigned * 4] = pid >> 16;
-            s->dct[assigned * 4 + 1] = pid & 0xffff;
-            s->dct[assigned * 4 + 2] = (pbcr_dcr[6] << 8) | pbcr_dcr[7];
-            s->dct[assigned * 4 + 3] = da;
+            res->dct[assigned * 4] = pid >> 16;
+            res->dct[assigned * 4 + 1] = pid & 0xffff;
+            res->dct[assigned * 4 + 2] = (pbcr_dcr[6] << 8) | pbcr_dcr[7];
+            res->dct[assigned * 4 + 3] = da;
             assigned++;
         }
 
 entdaa_done:
         i3c_end_transfer(s->bus);
+        res->dct_words = assigned * 4;
         /*
          * Only a command that assigned every address it was asked to
          * succeeds.  One that ran out of devices completes with
@@ -627,12 +660,11 @@ entdaa_done:
 
         trace_mipi_i3c_hci_ccc(s->id, ccc_id, rnw, dev_idx, bcst, data_len);
 
-        if (!rnw && s->tx_len > 0) {
-            memcpy(ccc_buf, s->tx_buf, MIN(s->tx_len, buf_len));
+        if (!rnw && cmd->tx_len > 0) {
+            memcpy(ccc_buf, cmd->tx_buf, MIN(cmd->tx_len, buf_len));
         } else {
             memset(ccc_buf, 0, buf_len);
         }
-        s->tx_len = 0;
 
         if (bcst) {
             /*
@@ -640,9 +672,7 @@ entdaa_done:
              * the controller's own state is updated here.
              */
             if (ccc_id == I3C_CCC_RSTDAA) {
-                memset(s->dat, 0, sizeof(s->dat));
-                memset(s->dct, 0, sizeof(s->dct));
-                trace_mipi_i3c_hci_rstdaa(s->id);
+                res->clear_dat_dct = true;
             }
         } else {
             uint8_t da = klass->dat_to_da(s, dev_idx);
@@ -654,8 +684,7 @@ entdaa_done:
                 buf_len = got;
             }
             if (rnw && ok && buf_len > 0) {
-                mipi_i3c_hci_push_rx(s, ccc_buf, buf_len);
-                mipi_i3c_hci_check_thresholds(s);
+                mipi_i3c_hci_result_rx(res, ccc_buf, buf_len);
                 actual_len = buf_len;
             }
         }
@@ -680,13 +709,165 @@ entdaa_done:
 
     trace_mipi_i3c_hci_cmd_done(s->id, attr, tid, ok, actual_len);
 
-    if (roc) {
-        mipi_i3c_hci_push_resp(s, resp);
+    res->resp = resp;
+    res->roc = roc;
+    res->completed = completed;
+    res->ok = ok;
+    res->rnw = rnw;
+}
+
+static void mipi_i3c_hci_finish_cmd(MIPII3CHCIState *s,
+                                    const MIPII3CHCIResult *res)
+{
+    MIPII3CHCIClass *klass = MIPI_I3C_HCI_GET_CLASS(s);
+
+    if (res->clear_dat_dct) {
+        memset(s->dat, 0, sizeof(s->dat));
+        memset(s->dct, 0, sizeof(s->dct));
+        trace_mipi_i3c_hci_rstdaa(s->id);
     }
-    if (completed && klass->post_cmd) {
-        klass->post_cmd(s, ok, rnw);
+    memcpy(s->dct, res->dct, res->dct_words * sizeof(uint32_t));
+    if (res->rx_len) {
+        mipi_i3c_hci_push_rx(s, res->rx, res->rx_len);
+    }
+    mipi_i3c_hci_check_thresholds(s);
+    if (res->roc) {
+        mipi_i3c_hci_push_resp(s, res->resp);
+    }
+    if (res->completed && klass->post_cmd) {
+        klass->post_cmd(s, res->ok, res->rnw);
     }
     mipi_i3c_hci_update_irq(s);
+}
+
+/*
+ * Room for another command: the response of every command accepted and
+ * not yet finished must still fit in the response queue.
+ */
+static bool mipi_i3c_hci_cmd_queue_ready(MIPII3CHCIState *s)
+{
+    return s->cmd_count + s->cmd_running < MIPI_I3C_HCI_CMD_QUEUE_SIZE;
+}
+
+static void mipi_i3c_hci_update_cmd_ready(MIPII3CHCIState *s)
+{
+    ARRAY_FIELD_DP32(s->pio_regs, PIO_INTR_STATUS, CMD_QUEUE_READY,
+                     mipi_i3c_hci_cmd_queue_ready(s));
+    mipi_i3c_hci_update_irq(s);
+}
+
+static void mipi_i3c_hci_queue_cmd(MIPII3CHCIState *s, uint32_t w0,
+                                   uint32_t w1)
+{
+    uint8_t attr = FIELD_EX32(w0, CMD0, ATTR);
+    bool rnw = FIELD_EX32(w0, CMD0, RNW);
+    bool cp = FIELD_EX32(w0, CMD0, CP);
+    MIPII3CHCICmd *cmd;
+
+    if (!mipi_i3c_hci_cmd_queue_ready(s)) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "%s: i3c%u command queue overflow\n", __func__, s->id);
+        mipi_i3c_hci_set_transfer_err(s);
+        return;
+    }
+    cmd = &s->cmd_queue[(s->cmd_head + s->cmd_count) %
+                        MIPI_I3C_HCI_CMD_QUEUE_SIZE];
+    s->cmd_count++;
+    cmd->w0 = w0;
+    cmd->w1 = w1;
+    cmd->deadline_ms = qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL) +
+                       s->cmd_timeout_ms;
+    cmd->tx_len = 0;
+    /*
+     * A write or a CCC takes the TX data written so far; a read and the
+     * other commands leave it for the command after.
+     */
+    if (attr == CMD_ATTR_CCC ||
+        ((attr == CMD_ATTR_REGULAR || attr == CMD_ATTR_IMMEDIATE) &&
+         (cp || !rnw))) {
+        memcpy(cmd->tx_buf, s->tx_buf, s->tx_len);
+        cmd->tx_len = s->tx_len;
+        s->tx_len = 0;
+        mipi_i3c_hci_check_thresholds(s);
+    }
+    mipi_i3c_hci_update_cmd_ready(s);
+    qemu_cond_signal(&s->cmd_cond);
+}
+
+/* Discard every queued command and job, and the result of the running one. */
+static void mipi_i3c_hci_cancel_cmds(MIPII3CHCIState *s)
+{
+    s->generation++;
+    s->cmd_count = 0;
+    s->job_count = 0;
+}
+
+bool mipi_i3c_hci_queue_job(MIPII3CHCIState *s, uint32_t arg)
+{
+    if (s->job_count == MIPI_I3C_HCI_JOB_QUEUE_SIZE) {
+        return false;
+    }
+    s->jobs[(s->job_head + s->job_count) % MIPI_I3C_HCI_JOB_QUEUE_SIZE] = arg;
+    s->job_count++;
+    qemu_cond_signal(&s->cmd_cond);
+    return true;
+}
+
+/*
+ * Room for one more response.  A command or job that answers only starts
+ * when its response fits: like the hardware, the engine stalls on a full
+ * response queue rather than drop a response.
+ */
+static bool mipi_i3c_hci_resp_room(MIPII3CHCIState *s)
+{
+    return (s->resp_wr + 1) % MIPI_I3C_HCI_RESP_FIFO_SIZE != s->resp_rd;
+}
+
+static void *mipi_i3c_hci_cmd_thread(void *opaque)
+{
+    MIPII3CHCIState *s = opaque;
+    MIPII3CHCIClass *klass = MIPI_I3C_HCI_GET_CLASS(s);
+
+    bql_lock();
+    while (!s->cmd_stop) {
+        bool room = mipi_i3c_hci_resp_room(s);
+
+        if (s->job_count && room) {
+            uint32_t arg = s->jobs[s->job_head];
+
+            s->job_head = (s->job_head + 1) % MIPI_I3C_HCI_JOB_QUEUE_SIZE;
+            s->job_count--;
+            s->job_running = true;
+            s->bus->xfer_deadline_ms = qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL) +
+                                       s->cmd_timeout_ms;
+            klass->run_job(s, arg, s->generation);
+            s->bus->xfer_deadline_ms = 0;
+            s->job_running = false;
+            mipi_i3c_hci_update_irq(s);
+        } else if (!s->job_count && s->cmd_count &&
+                   (room ||
+                    !FIELD_EX32(s->cmd_queue[s->cmd_head].w0, CMD0, ROC))) {
+            MIPII3CHCICmd cmd = s->cmd_queue[s->cmd_head];
+            MIPII3CHCIResult res = {};
+            uint32_t gen = s->generation;
+
+            s->cmd_head = (s->cmd_head + 1) % MIPI_I3C_HCI_CMD_QUEUE_SIZE;
+            s->cmd_count--;
+            s->cmd_running = true;
+            s->bus->xfer_deadline_ms = cmd.deadline_ms;
+            mipi_i3c_hci_run_cmd(s, &cmd, &res);
+            s->bus->xfer_deadline_ms = 0;
+            s->cmd_running = false;
+            if (s->generation == gen) {
+                mipi_i3c_hci_finish_cmd(s, &res);
+            }
+            mipi_i3c_hci_update_cmd_ready(s);
+        } else {
+            qemu_cond_wait_bql(&s->cmd_cond);
+        }
+    }
+    bql_unlock();
+    return NULL;
 }
 
 /* Reset everything but the interrupt line. */
@@ -717,6 +898,7 @@ static void mipi_i3c_hci_reset_state(MIPII3CHCIState *s)
     s->tx_len = 0;
     s->cmd_have_word0 = false;
     s->cmd_word0 = 0;
+    mipi_i3c_hci_cancel_cmds(s);
 
     memset(s->dat, 0, sizeof(s->dat));
     memset(s->dct, 0, sizeof(s->dct));
@@ -885,13 +1067,14 @@ static void mipi_i3c_hci_write_hci(MIPII3CHCIState *s, hwaddr offset,
         if (FIELD_EX32(val, RESET_CONTROL, CMD_QUEUE_RST)) {
             s->cmd_have_word0 = false;
             s->cmd_word0 = 0;
-            s->pio_regs[R_PIO_INTR_STATUS] |=
-                R_PIO_INTR_STATUS_CMD_QUEUE_READY_MASK;
+            mipi_i3c_hci_cancel_cmds(s);
+            mipi_i3c_hci_update_cmd_ready(s);
         }
         if (FIELD_EX32(val, RESET_CONTROL, RESP_QUEUE_RST)) {
             s->resp_rd = s->resp_wr = 0;
             s->pio_regs[R_PIO_INTR_STATUS] &=
                 ~R_PIO_INTR_STATUS_RESP_READY_MASK;
+            qemu_cond_signal(&s->cmd_cond);
         }
         if (FIELD_EX32(val, RESET_CONTROL, TX_FIFO_RST)) {
             s->tx_len = 0;
@@ -920,6 +1103,8 @@ static void mipi_i3c_hci_write_hci(MIPII3CHCIState *s, hwaddr offset,
             s->resp_rd = s->resp_wr = 0;
             s->pio_regs[R_PIO_INTR_STATUS] &=
                 ~R_PIO_INTR_STATUS_RESP_READY_MASK;
+            mipi_i3c_hci_cancel_cmds(s);
+            mipi_i3c_hci_update_cmd_ready(s);
             if (klass->post_cmd) {
                 klass->post_cmd(s, true, false);
             }
@@ -959,7 +1144,7 @@ static void mipi_i3c_hci_write_pio(MIPII3CHCIState *s, hwaddr pio_off,
 
             s->cmd_have_word0 = false;
             s->cmd_word0 = 0;
-            mipi_i3c_hci_process_cmd(s, w0, val);
+            mipi_i3c_hci_queue_cmd(s, w0, val);
         }
         break;
 
@@ -1094,6 +1279,26 @@ static void mipi_i3c_hci_realize(DeviceState *dev, Error **errp)
     sysbus_init_mmio(SYS_BUS_DEVICE(dev), &s->mr);
 
     s->bus = i3c_init_bus_type(TYPE_MIPI_I3C_HCI_BUS, DEVICE(s), name);
+    /* Transfers run on the command thread, never on a vCPU. */
+    s->bus->xfer_may_block = true;
+
+    qemu_cond_init(&s->cmd_cond);
+    s->cmd_stop = false;
+    qemu_thread_create(&s->cmd_thread, name, mipi_i3c_hci_cmd_thread, s,
+                       QEMU_THREAD_JOINABLE);
+}
+
+static void mipi_i3c_hci_unrealize(DeviceState *dev)
+{
+    MIPII3CHCIState *s = MIPI_I3C_HCI(dev);
+
+    s->cmd_stop = true;
+    qemu_cond_signal(&s->cmd_cond);
+    /* The thread takes the BQL to see the stop, and may be in a transfer. */
+    bql_unlock();
+    qemu_thread_join(&s->cmd_thread);
+    bql_lock();
+    qemu_cond_destroy(&s->cmd_cond);
 }
 
 I3CBus *mipi_i3c_hci_get_bus(MIPII3CHCIState *s)
@@ -1249,6 +1454,97 @@ static uint8_t mipi_i3c_hci_default_entdaa_next_da(MIPII3CHCIState *s,
     return FIELD_EX32(s->dat[slot * 2], DAT_W0, DYNAMIC_ADDR);
 }
 
+/*
+ * Queued commands and jobs are saved, but not one a target is carrying out
+ * without the BQL: its outcome is not known yet.  Waiting for it here would
+ * let this and other devices change while the machine is being saved.
+ */
+static bool mipi_i3c_hci_pre_save(void *opaque, Error **errp)
+{
+    MIPII3CHCIState *s = opaque;
+
+    if (s->cmd_running || s->job_running) {
+        error_setg(errp, "i3c%u has a transfer in progress; retry when idle",
+                   s->id);
+        return false;
+    }
+    return true;
+}
+
+/* What was queued before a load has no place in the loaded state. */
+static int mipi_i3c_hci_pre_load(void *opaque)
+{
+    mipi_i3c_hci_cancel_cmds(opaque);
+    return 0;
+}
+
+static bool mipi_i3c_hci_queue_needed(void *opaque)
+{
+    MIPII3CHCIState *s = opaque;
+
+    return s->cmd_count || s->job_count;
+}
+
+static int mipi_i3c_hci_queue_post_load(void *opaque, int version_id)
+{
+    MIPII3CHCIState *s = opaque;
+    uint32_t i;
+
+    if (s->cmd_head >= MIPI_I3C_HCI_CMD_QUEUE_SIZE ||
+        s->cmd_count > MIPI_I3C_HCI_CMD_QUEUE_SIZE ||
+        s->job_head >= MIPI_I3C_HCI_JOB_QUEUE_SIZE ||
+        s->job_count > MIPI_I3C_HCI_JOB_QUEUE_SIZE) {
+        goto invalid;
+    }
+    for (i = 0; i < MIPI_I3C_HCI_CMD_QUEUE_SIZE; i++) {
+        if (s->cmd_queue[i].tx_len > MIPI_I3C_HCI_TX_BUF_SIZE) {
+            goto invalid;
+        }
+    }
+    qemu_cond_signal(&s->cmd_cond);
+    return 0;
+
+invalid:
+    s->cmd_head = 0;
+    s->job_head = 0;
+    mipi_i3c_hci_cancel_cmds(s);
+    return -EINVAL;
+}
+
+static const VMStateDescription vmstate_mipi_i3c_hci_cmd = {
+    .name = TYPE_MIPI_I3C_HCI "/cmd",
+    .version_id = 1,
+    .minimum_version_id = 1,
+    .fields = (const VMStateField[]) {
+        VMSTATE_UINT32(w0, MIPII3CHCICmd),
+        VMSTATE_UINT32(w1, MIPII3CHCICmd),
+        VMSTATE_UINT8_ARRAY(tx_buf, MIPII3CHCICmd, MIPI_I3C_HCI_TX_BUF_SIZE),
+        VMSTATE_UINT32(tx_len, MIPII3CHCICmd),
+        VMSTATE_INT64(deadline_ms, MIPII3CHCICmd),
+        VMSTATE_END_OF_LIST(),
+    },
+};
+
+static const VMStateDescription vmstate_mipi_i3c_hci_queue = {
+    .name = TYPE_MIPI_I3C_HCI "/queue",
+    .version_id = 1,
+    .minimum_version_id = 1,
+    .needed = mipi_i3c_hci_queue_needed,
+    .post_load = mipi_i3c_hci_queue_post_load,
+    .fields = (const VMStateField[]) {
+        VMSTATE_STRUCT_ARRAY(cmd_queue, MIPII3CHCIState,
+                             MIPI_I3C_HCI_CMD_QUEUE_SIZE, 1,
+                             vmstate_mipi_i3c_hci_cmd, MIPII3CHCICmd),
+        VMSTATE_UINT32(cmd_head, MIPII3CHCIState),
+        VMSTATE_UINT32(cmd_count, MIPII3CHCIState),
+        VMSTATE_UINT32_ARRAY(jobs, MIPII3CHCIState,
+                             MIPI_I3C_HCI_JOB_QUEUE_SIZE),
+        VMSTATE_UINT32(job_head, MIPII3CHCIState),
+        VMSTATE_UINT32(job_count, MIPII3CHCIState),
+        VMSTATE_END_OF_LIST(),
+    },
+};
+
 /* The queue indexes and TX length index arrays: reject any out of range. */
 static int mipi_i3c_hci_post_load(void *opaque, int version_id)
 {
@@ -1271,6 +1567,8 @@ const VMStateDescription vmstate_mipi_i3c_hci = {
     .version_id = 1,
     .minimum_version_id = 1,
     .post_load = mipi_i3c_hci_post_load,
+    .pre_save_errp = mipi_i3c_hci_pre_save,
+    .pre_load = mipi_i3c_hci_pre_load,
     .fields = (const VMStateField[]) {
         VMSTATE_UINT32_ARRAY(hci_regs, MIPII3CHCIState,
                              MIPI_I3C_HCI_HCI_NR_REGS),
@@ -1297,10 +1595,22 @@ const VMStateDescription vmstate_mipi_i3c_hci = {
         VMSTATE_UINT32(tx_len, MIPII3CHCIState),
         VMSTATE_END_OF_LIST(),
     },
+    .subsections = (const VMStateDescription * const []) {
+        &vmstate_mipi_i3c_hci_queue,
+        NULL
+    },
 };
 
 static const Property mipi_i3c_hci_props[] = {
     DEFINE_PROP_UINT8("ctrl-id", MIPII3CHCIState, id, 0),
+    /*
+     * How long, from the moment software queues it, a command gets to
+     * finish on the bus before it completes as failed.  Software waits for
+     * its commands with a timeout too, and takes no response once that
+     * has passed; this must stay well inside it.
+     */
+    DEFINE_PROP_UINT32("cmd-timeout-ms", MIPII3CHCIState, cmd_timeout_ms,
+                       MIPI_I3C_HCI_CMD_TIMEOUT_MS),
 };
 
 static void mipi_i3c_hci_class_init(ObjectClass *klass, const void *data)
@@ -1313,6 +1623,7 @@ static void mipi_i3c_hci_class_init(ObjectClass *klass, const void *data)
     /* Machines with a platform bus can create the generic controller. */
     dc->user_creatable = true;
     dc->realize = mipi_i3c_hci_realize;
+    dc->unrealize = mipi_i3c_hci_unrealize;
     dc->vmsd = &vmstate_mipi_i3c_hci;
     rc->phases.enter = mipi_i3c_hci_reset_enter;
     rc->phases.hold = mipi_i3c_hci_reset_hold;
