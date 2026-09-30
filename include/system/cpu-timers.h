@@ -25,6 +25,14 @@ void cpu_enable_ticks(void);
 void cpu_disable_ticks(void);
 
 /*
+ * Stop cpu_get_ticks() and cpu_get_clock() until the matching
+ * cpu_release_ticks(), although the VM keeps running. Holds nest.
+ * Any thread, BQL not required. No effect with icount.
+ */
+void cpu_hold_ticks(void);
+void cpu_release_ticks(void);
+
+/*
  * return the time elapsed in VM between vm_start and vm_stop.
  * cpu_get_ticks() uses units of the host CPU cycle counter.
  */

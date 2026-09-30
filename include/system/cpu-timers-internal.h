@@ -40,6 +40,9 @@ typedef struct TimersState {
     QemuSpin vm_clock_lock;
 
     int16_t cpu_ticks_enabled;
+    /* Under vm_clock_lock; cpu_ticks_enabled follows them */
+    bool cpu_ticks_vm_running;
+    int cpu_ticks_holds;
 
     /* Conversion factor from emulated instructions to virtual clock ticks.  */
     int16_t icount_time_shift;

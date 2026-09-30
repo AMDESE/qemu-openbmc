@@ -100,6 +100,23 @@ int64_t cpu_get_clock(void)
     return ti;
 }
 
+/* Ticks run while the VM runs and no hold is taken. */
+static void cpu_update_ticks_locked(void)
+{
+    bool run = timers_state.cpu_ticks_vm_running &&
+               !timers_state.cpu_ticks_holds;
+
+    if (run && !timers_state.cpu_ticks_enabled) {
+        timers_state.cpu_ticks_offset -= cpu_get_host_ticks();
+        timers_state.cpu_clock_offset -= get_clock();
+        timers_state.cpu_ticks_enabled = 1;
+    } else if (!run && timers_state.cpu_ticks_enabled) {
+        timers_state.cpu_ticks_offset += cpu_get_host_ticks();
+        timers_state.cpu_clock_offset = cpu_get_clock_locked();
+        timers_state.cpu_ticks_enabled = 0;
+    }
+}
+
 /*
  * enable cpu_get_ticks()
  * Caller must hold BQL which serves as mutex for vm_clock_seqlock.
@@ -108,11 +125,8 @@ void cpu_enable_ticks(void)
 {
     seqlock_write_lock(&timers_state.vm_clock_seqlock,
                        &timers_state.vm_clock_lock);
-    if (!timers_state.cpu_ticks_enabled) {
-        timers_state.cpu_ticks_offset -= cpu_get_host_ticks();
-        timers_state.cpu_clock_offset -= get_clock();
-        timers_state.cpu_ticks_enabled = 1;
-    }
+    timers_state.cpu_ticks_vm_running = true;
+    cpu_update_ticks_locked();
     seqlock_write_unlock(&timers_state.vm_clock_seqlock,
                        &timers_state.vm_clock_lock);
 }
@@ -126,11 +140,35 @@ void cpu_disable_ticks(void)
 {
     seqlock_write_lock(&timers_state.vm_clock_seqlock,
                        &timers_state.vm_clock_lock);
-    if (timers_state.cpu_ticks_enabled) {
-        timers_state.cpu_ticks_offset += cpu_get_host_ticks();
-        timers_state.cpu_clock_offset = cpu_get_clock_locked();
-        timers_state.cpu_ticks_enabled = 0;
+    timers_state.cpu_ticks_vm_running = false;
+    cpu_update_ticks_locked();
+    seqlock_write_unlock(&timers_state.vm_clock_seqlock,
+                         &timers_state.vm_clock_lock);
+}
+
+void cpu_hold_ticks(void)
+{
+    if (icount_enabled()) {
+        return;
     }
+    seqlock_write_lock(&timers_state.vm_clock_seqlock,
+                       &timers_state.vm_clock_lock);
+    timers_state.cpu_ticks_holds++;
+    cpu_update_ticks_locked();
+    seqlock_write_unlock(&timers_state.vm_clock_seqlock,
+                         &timers_state.vm_clock_lock);
+}
+
+void cpu_release_ticks(void)
+{
+    if (icount_enabled()) {
+        return;
+    }
+    seqlock_write_lock(&timers_state.vm_clock_seqlock,
+                       &timers_state.vm_clock_lock);
+    assert(timers_state.cpu_ticks_holds > 0);
+    timers_state.cpu_ticks_holds--;
+    cpu_update_ticks_locked();
     seqlock_write_unlock(&timers_state.vm_clock_seqlock,
                          &timers_state.vm_clock_lock);
 }
