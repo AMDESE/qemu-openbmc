@@ -88,6 +88,8 @@ static const hwaddr aspeed_soc_ast2700_memmap[] = {
     [ASPEED_DEV_UART10]    =  0x14C33900,
     [ASPEED_DEV_UART11]    =  0x14C33A00,
     [ASPEED_DEV_UART12]    =  0x14C33B00,
+    [ASPEED_DEV_UART13]    =  0x14C33C00,
+    [ASPEED_DEV_UART14]    =  0x14C33D00,
     [ASPEED_DEV_LTPI_CTRL1] =  0x14C34000,
     [ASPEED_DEV_LTPI_GPIO0] =  0x14C34C00,
     [ASPEED_DEV_LTPI_CTRL2] =  0x14C35000,
@@ -133,6 +135,8 @@ static const int aspeed_soc_ast2700a1_irqmap[] = {
     [ASPEED_DEV_KCS]       = 192,
     [ASPEED_DEV_LTPI_GPIO0] = 192,
     [ASPEED_DEV_LTPI_GPIO1] = 193,
+    [ASPEED_DEV_UART13]    = 192,
+    [ASPEED_DEV_UART14]    = 193,
     [ASPEED_DEV_I2C]       = 194,
     [ASPEED_DEV_ADC]       = 194,
     [ASPEED_DEV_GPIO]      = 194,
@@ -174,11 +178,13 @@ static const int ast2700_gic192_intcmap[] = {
     [ASPEED_DEV_IBT]       = 2,
     [ASPEED_DEV_KCS]       = 4,
     [ASPEED_DEV_LTPI_GPIO0] = 22,
+    [ASPEED_DEV_UART13]    = 23,
 };
 
 /* GICINT 193 */
 static const int ast2700_gic193_intcmap[] = {
     [ASPEED_DEV_LTPI_GPIO1] = 22,
+    [ASPEED_DEV_UART14]    = 23,
 };
 
 /* GICINT 194 */
@@ -1195,7 +1201,7 @@ static void aspeed_soc_ast2700a1_class_init(ObjectClass *oc, const void *data)
     sc->ehcis_num    = 4;
     sc->wdts_num     = 8;
     sc->macs_num     = 3;
-    sc->uarts_num    = 13;
+    sc->uarts_num    = 15;
     sc->num_cpus     = 4;
     sc->ioexp_num    = 2;
     sc->uarts_base   = ASPEED_DEV_UART0;
@@ -1225,7 +1231,7 @@ static void aspeed_soc_ast2700a2_class_init(ObjectClass *oc, const void *data)
     sc->ehcis_num    = 4;
     sc->wdts_num     = 8;
     sc->macs_num     = 3;
-    sc->uarts_num    = 13;
+    sc->uarts_num    = 15;
     sc->num_cpus     = 4;
     sc->ioexp_num    = 2;
     sc->uarts_base   = ASPEED_DEV_UART0;
