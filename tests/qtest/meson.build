@@ -224,7 +224,8 @@ qtests_aspeed64 = \
    'ast2700-i3c-hci-test',
    'ast2700-ltpi-gpio-test',
    'ast2700-sgpio-test',
-   'ast2700-smc-test']
+   'ast2700-smc-test',
+   'ast2700-uart-test']
 
 qtests_stm32l4x5 = \
   ['stm32l4x5_exti-test',
