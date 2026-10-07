@@ -222,6 +222,7 @@ qtests_aspeed64 = \
   ['ast2700-gpio-test',
    'ast2700-hace-test',
    'ast2700-i3c-hci-test',
+   'ast2700-ltpi-gpio-test',
    'ast2700-sgpio-test',
    'ast2700-smc-test']
 
