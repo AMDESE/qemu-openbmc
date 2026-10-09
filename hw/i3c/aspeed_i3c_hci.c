@@ -402,25 +402,12 @@ static void aspeed_i3c_hci_realize(DeviceState *dev, Error **errp)
     }
 }
 
-static const VMStateDescription vmstate_aspeed_i3c_hci = {
-    .name = TYPE_ASPEED_I3C_HCI,
-    .version_id = 1,
-    .minimum_version_id = 1,
-    .fields = (const VMStateField[]) {
-        VMSTATE_STRUCT_ARRAY(ctrls, AspeedI3CHCIState,
-                             ASPEED_I3C_HCI_NR_CTRLS, 1,
-                             vmstate_aspeed_i3c_hci_ctrl, AspeedI3CHCICtrl),
-        VMSTATE_END_OF_LIST(),
-    },
-};
-
 static void aspeed_i3c_hci_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
 
     dc->desc = "ASPEED AST2700 I3C HCI controllers";
     dc->realize = aspeed_i3c_hci_realize;
-    dc->vmsd = &vmstate_aspeed_i3c_hci;
 }
 
 static const TypeInfo aspeed_i3c_hci_types[] = {
