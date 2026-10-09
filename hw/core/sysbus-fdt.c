@@ -36,6 +36,7 @@
 #include "hw/display/ramfb.h"
 #include "hw/uefi/var-service-api.h"
 #include "hw/arm/fdt.h"
+#include "hw/i3c/mipi_i3c_hci.h"
 
 /*
  * internal struct that contains the information to create dynamic
@@ -118,6 +119,27 @@ static int add_uefi_vars_node(SysBusDevice *sbdev, void *opaque)
     return 0;
 }
 
+/* Generic MIPI I3C HCI, compatible with the "mipi-i3c-hci" binding */
+static int add_mipi_i3c_hci_fdt_node(SysBusDevice *sbdev, void *opaque)
+{
+    PlatformBusFDTData *data = opaque;
+    PlatformBusDevice *pbus = data->pbus;
+    void *fdt = data->fdt;
+    uint64_t mmio_base = platform_bus_get_mmio_addr(pbus, sbdev, 0);
+    uint64_t size = memory_region_size(sysbus_mmio_get_region(sbdev, 0));
+    int irq = data->irq_start + platform_bus_get_irqn(pbus, sbdev, 0);
+    g_autofree char *nodename = g_strdup_printf("%s/i3c@%" PRIx64,
+                                                data->pbus_node_name,
+                                                mmio_base);
+
+    qemu_fdt_add_subnode(fdt, nodename);
+    qemu_fdt_setprop_string(fdt, nodename, "compatible", "mipi-i3c-hci");
+    qemu_fdt_setprop_sized_cells(fdt, nodename, "reg", 1, mmio_base, 1, size);
+    qemu_fdt_setprop_cells(fdt, nodename, "interrupts", GIC_FDT_IRQ_TYPE_SPI,
+                           irq, GIC_FDT_IRQ_FLAGS_LEVEL_HI);
+    return 0;
+}
+
 static int no_fdt_node(SysBusDevice *sbdev, void *opaque)
 {
     return 0;
@@ -140,6 +162,7 @@ static const BindingEntry bindings[] = {
     TYPE_BINDING(TYPE_ARM_SMMUV3, no_fdt_node),
     TYPE_BINDING(TYPE_RAMFB_DEVICE, no_fdt_node),
     TYPE_BINDING(TYPE_UEFI_VARS_SYSBUS, add_uefi_vars_node),
+    TYPE_BINDING(TYPE_MIPI_I3C_HCI, add_mipi_i3c_hci_fdt_node),
     TYPE_BINDING("", NULL), /* last element */
 };
 
