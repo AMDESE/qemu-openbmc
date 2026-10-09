@@ -197,6 +197,7 @@ static int mock_i3c_target_handle_ccc_write(I3CTarget *i3c, const uint8_t *data,
     case I3C_CCC_SETAASA:
     case I3C_CCC_RSTDAA:
     case I3C_CCCD_SETDASA:
+    case I3C_CCCD_SETNEWDA:
     case I3C_CCCD_GETPID:
     case I3C_CCCD_GETBCR:
     case I3C_CCCD_GETDCR:
