@@ -112,6 +112,10 @@ static int mock_i3c_target_handle_ccc_read(I3CTarget *i3c, uint8_t *data,
 {
     MockI3cTargetState *s = MOCK_I3C_TARGET(i3c);
 
+    if (s->cfg.nack_ccc && s->curr_ccc == s->cfg.nack_ccc) {
+        return -1;
+    }
+
     switch (s->curr_ccc) {
     case I3C_CCCD_GETMXDS:
         /* Default data rate for I3C. */
@@ -181,6 +185,10 @@ static int mock_i3c_target_handle_ccc_write(I3CTarget *i3c, const uint8_t *data,
         s->in_ccc = true;
         s->curr_ccc = *data;
         trace_mock_i3c_target_new_ccc(s->curr_ccc);
+    }
+
+    if (s->cfg.nack_ccc && s->curr_ccc == s->cfg.nack_ccc) {
+        return -1;
     }
 
     *num_sent = 1;
@@ -273,6 +281,11 @@ static const Property remote_i3c_props[] = {
      * 1 second. Disabled if the IBI magic number is 0.
      */
     DEFINE_PROP_UINT8("ibi-magic-num", MockI3cTargetState, cfg.ibi_magic, 0x00),
+    /*
+     * The target NACKs this CCC, to test how a controller handles a target
+     * that refuses one.  Disabled if 0.
+     */
+    DEFINE_PROP_UINT8("nack-ccc", MockI3cTargetState, cfg.nack_ccc, 0x00),
 };
 
 static void mock_i3c_target_class_init(ObjectClass *klass, const void *data)
