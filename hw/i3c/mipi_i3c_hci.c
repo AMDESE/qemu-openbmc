@@ -1249,10 +1249,28 @@ static uint8_t mipi_i3c_hci_default_entdaa_next_da(MIPII3CHCIState *s,
     return FIELD_EX32(s->dat[slot * 2], DAT_W0, DYNAMIC_ADDR);
 }
 
+/* The queue indexes and TX length index arrays: reject any out of range. */
+static int mipi_i3c_hci_post_load(void *opaque, int version_id)
+{
+    MIPII3CHCIState *s = opaque;
+
+    if (s->resp_rd >= MIPI_I3C_HCI_RESP_FIFO_SIZE ||
+        s->resp_wr >= MIPI_I3C_HCI_RESP_FIFO_SIZE ||
+        s->rx_rd >= MIPI_I3C_HCI_RX_FIFO_DWORDS ||
+        s->rx_wr >= MIPI_I3C_HCI_RX_FIFO_DWORDS ||
+        s->ibi_rd >= MIPI_I3C_HCI_IBI_FIFO_SIZE ||
+        s->ibi_wr >= MIPI_I3C_HCI_IBI_FIFO_SIZE ||
+        s->tx_len > MIPI_I3C_HCI_TX_BUF_SIZE) {
+        return -EINVAL;
+    }
+    return 0;
+}
+
 const VMStateDescription vmstate_mipi_i3c_hci = {
     .name = TYPE_MIPI_I3C_HCI,
     .version_id = 1,
     .minimum_version_id = 1,
+    .post_load = mipi_i3c_hci_post_load,
     .fields = (const VMStateField[]) {
         VMSTATE_UINT32_ARRAY(hci_regs, MIPII3CHCIState,
                              MIPI_I3C_HCI_HCI_NR_REGS),
