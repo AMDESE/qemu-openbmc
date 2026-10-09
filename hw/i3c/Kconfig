@@ -15,8 +15,8 @@ config MOCK_I3C_TARGET
     default y if I3C_DEVICES
 
 config MIPI_I3C_HCI
-    # Generic MIPI I3C Host Controller Interface (HCI) base model. Not
-    # instantiated on its own; selected by concrete HCI implementations.
+    # Generic MIPI I3C Host Controller Interface (HCI). Vendor controllers
+    # derive from it; machines with a platform bus can also create it.
     bool
     select I3C
 
