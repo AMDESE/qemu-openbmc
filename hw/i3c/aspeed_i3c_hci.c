@@ -348,6 +348,8 @@ static void aspeed_i3c_hci_ctrl_class_init(ObjectClass *klass,
     MIPII3CHCIClass *mc = MIPI_I3C_HCI_CLASS(klass);
 
     dc->desc = "ASPEED AST2700 I3C HCI controller";
+    /* Part of the AST2700 controller block, not created on its own. */
+    dc->user_creatable = false;
     dc->vmsd = &vmstate_aspeed_i3c_hci_ctrl;
 
     mc->mmio_size = ASPEED_I3C_HCI_CTRL_SIZE;

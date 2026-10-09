@@ -1292,6 +1292,8 @@ static void mipi_i3c_hci_class_init(ObjectClass *klass, const void *data)
     MIPII3CHCIClass *mc = MIPI_I3C_HCI_CLASS(klass);
 
     dc->desc = "MIPI I3C Host Controller Interface";
+    /* Machines with a platform bus can create the generic controller. */
+    dc->user_creatable = true;
     dc->realize = mipi_i3c_hci_realize;
     dc->vmsd = &vmstate_mipi_i3c_hci;
     rc->phases.enter = mipi_i3c_hci_reset_enter;
@@ -1333,7 +1335,6 @@ static const TypeInfo mipi_i3c_hci_types[] = {
         .instance_size = sizeof(MIPII3CHCIState),
         .class_size = sizeof(MIPII3CHCIClass),
         .class_init = mipi_i3c_hci_class_init,
-        .abstract = true,
     },
 };
 
