@@ -1,0 +1,70 @@
+name: Test QEMU Buildable
+
+on:
+  push:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-tags: true
+          fetch-depth: 100
+
+      - name: Check git describe after fetching tags
+        run: |
+          git describe --tags --match 'v*'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libglib2.0-dev \
+            pkg-config \
+            flex \
+            bison \
+            libslirp-dev \
+            python3-venv
+
+      - name: Set up Python virtual environment and install dependencies
+        run: |
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install sphinx sphinx_rtd_theme ninja
+
+      - name: Configure QEMU
+        run: |
+          source venv/bin/activate
+          mkdir -p build
+          cd build
+          ../configure
+
+      - name: Build QEMU
+        working-directory: build
+        run: |
+          source ../venv/bin/activate
+          make -j$(nproc)
+
+      - name: Check QEMU version
+        working-directory: build
+        run: ./qemu-system-aarch64 --version
+
+      - name: Package QEMU binary
+        working-directory: build
+        run: |
+          # Get version from git describe
+          VERSION=$(git describe --tags --match 'v*')
+          echo "QEMU_VERSION=${VERSION}" >> $GITHUB_ENV
+
+          # Create tarball
+          tar czf qemu-system-aarch64-${VERSION}.tar.gz qemu-system-aarch64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: qemu-system-aarch64-${{ env.QEMU_VERSION }}
+          path: build/qemu-system-aarch64-${{ env.QEMU_VERSION }}.tar.gz
+          retention-days: 7
