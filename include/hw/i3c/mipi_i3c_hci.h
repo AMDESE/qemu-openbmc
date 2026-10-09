@@ -24,6 +24,9 @@
 #define TYPE_MIPI_I3C_HCI "mipi-i3c-hci"
 OBJECT_DECLARE_TYPE(MIPII3CHCIState, MIPII3CHCIClass, MIPI_I3C_HCI)
 
+/* The controller's I3C bus; it takes IBIs from the targets on it. */
+#define TYPE_MIPI_I3C_HCI_BUS "mipi-i3c-hci-bus"
+
 /*
  * Default register layout and identity; see MIPII3CHCIClass.  The HCI
  * registers are always at offset 0.
@@ -120,6 +123,12 @@ struct MIPII3CHCIState {
     /* TX data written to the data port ahead of a command. */
     uint8_t  tx_buf[MIPI_I3C_HCI_TX_BUF_SIZE];
     uint32_t tx_len;
+
+    /* IBI a target on the bus is raising. */
+    bool     ibi_active;
+    uint8_t  ibi_da;
+    uint8_t  ibi_mdb;
+    bool     ibi_has_mdb;
 
 };
 

@@ -713,6 +713,7 @@ static void mipi_i3c_hci_reset_state(MIPII3CHCIState *s)
     s->resp_rd = s->resp_wr = 0;
     s->rx_rd = s->rx_wr = 0;
     s->ibi_rd = s->ibi_wr = 0;
+    s->ibi_active = false;
     s->tx_len = 0;
     s->cmd_have_word0 = false;
     s->cmd_word0 = 0;
@@ -1092,12 +1093,33 @@ static void mipi_i3c_hci_realize(DeviceState *dev, Error **errp)
                           klass->mmio_size);
     sysbus_init_mmio(SYS_BUS_DEVICE(dev), &s->mr);
 
-    s->bus = i3c_init_bus(DEVICE(s), name);
+    s->bus = i3c_init_bus_type(TYPE_MIPI_I3C_HCI_BUS, DEVICE(s), name);
 }
 
 I3CBus *mipi_i3c_hci_get_bus(MIPII3CHCIState *s)
 {
     return s->bus;
+}
+
+/* Whether an IBI from @da is taken; 0 is not a target's address. */
+static bool mipi_i3c_hci_ibi_allowed(MIPII3CHCIState *s, uint8_t da)
+{
+    MIPII3CHCIClass *klass = MIPI_I3C_HCI_GET_CLASS(s);
+    int idx;
+
+    if (!da) {
+        return true;
+    }
+    idx = klass->da_to_dat(s, da);
+    if (idx < 0) {
+        trace_mipi_i3c_hci_ibi_suppress(s->id, da, "no DAT entry");
+        return false;
+    }
+    if (FIELD_EX32(s->dat[idx * 2], DAT_W0, SIR_REJECT)) {
+        trace_mipi_i3c_hci_ibi_suppress(s->id, da, "SIR_REJECT set");
+        return false;
+    }
+    return true;
 }
 
 bool mipi_i3c_hci_inject_ibi(MIPII3CHCIState *s, uint8_t da,
@@ -1106,17 +1128,8 @@ bool mipi_i3c_hci_inject_ibi(MIPII3CHCIState *s, uint8_t da,
     MIPII3CHCIClass *klass = MIPI_I3C_HCI_GET_CLASS(s);
     uint32_t desc = 0;
 
-    if (da) {
-        int idx = klass->da_to_dat(s, da);
-
-        if (idx < 0) {
-            trace_mipi_i3c_hci_ibi_suppress(s->id, da, "no DAT entry");
-            return false;
-        }
-        if (FIELD_EX32(s->dat[idx * 2], DAT_W0, SIR_REJECT)) {
-            trace_mipi_i3c_hci_ibi_suppress(s->id, da, "SIR_REJECT set");
-            return false;
-        }
+    if (!mipi_i3c_hci_ibi_allowed(s, da)) {
+        return false;
     }
 
     desc = FIELD_DP32(desc, IBI_STATUS, LAST_STATUS, 1);
@@ -1152,6 +1165,67 @@ static int mipi_i3c_hci_default_da_to_dat(MIPII3CHCIState *s, uint8_t da)
         }
     }
     return -1;
+}
+
+static MIPII3CHCIState *mipi_i3c_hci_from_bus(I3CBus *bus)
+{
+    return MIPI_I3C_HCI(BUS(bus)->parent);
+}
+
+/*
+ * IBIs from the targets on the bus.  A target interrupt is ACKed unless the
+ * DAT entry of its address rejects it.  Its first data byte is kept as the
+ * mandatory data byte and any further payload is dropped.  Hot-join and
+ * controller role requests are NACKed.
+ */
+static int mipi_i3c_hci_bus_ibi_handle(I3CBus *bus, uint8_t addr,
+                                       bool is_recv)
+{
+    MIPII3CHCIState *s = mipi_i3c_hci_from_bus(bus);
+
+    if (!is_recv || addr == I3C_HJ_ADDR) {
+        qemu_log_mask(LOG_UNIMP, "%s: i3c%u %s request from 0x%02x NACKed\n",
+                      __func__, s->id,
+                      addr == I3C_HJ_ADDR ? "hot-join" : "controller role",
+                      addr);
+        return -1;
+    }
+    if (!mipi_i3c_hci_ibi_allowed(s, addr)) {
+        return -1;
+    }
+    s->ibi_active = true;
+    s->ibi_da = addr;
+    s->ibi_has_mdb = false;
+    return 0;
+}
+
+static int mipi_i3c_hci_bus_ibi_recv(I3CBus *bus, uint8_t data)
+{
+    MIPII3CHCIState *s = mipi_i3c_hci_from_bus(bus);
+
+    if (!s->ibi_active) {
+        return -1;
+    }
+    if (!s->ibi_has_mdb) {
+        s->ibi_mdb = data;
+        s->ibi_has_mdb = true;
+    } else {
+        qemu_log_mask(LOG_UNIMP,
+                      "%s: i3c%u IBI payload after the first byte dropped\n",
+                      __func__, s->id);
+    }
+    return 0;
+}
+
+static int mipi_i3c_hci_bus_ibi_finish(I3CBus *bus)
+{
+    MIPII3CHCIState *s = mipi_i3c_hci_from_bus(bus);
+
+    if (s->ibi_active) {
+        s->ibi_active = false;
+        mipi_i3c_hci_inject_ibi(s, s->ibi_da, s->ibi_mdb, s->ibi_has_mdb);
+    }
+    return 0;
 }
 
 static uint8_t mipi_i3c_hci_default_dat_to_da(MIPII3CHCIState *s,
@@ -1238,7 +1312,21 @@ static void mipi_i3c_hci_class_init(ObjectClass *klass, const void *data)
     mc->entdaa_next_da = mipi_i3c_hci_default_entdaa_next_da;
 }
 
+static void mipi_i3c_hci_bus_class_init(ObjectClass *klass, const void *data)
+{
+    I3CBusClass *bc = I3C_BUS_CLASS(klass);
+
+    bc->ibi_handle = mipi_i3c_hci_bus_ibi_handle;
+    bc->ibi_recv = mipi_i3c_hci_bus_ibi_recv;
+    bc->ibi_finish = mipi_i3c_hci_bus_ibi_finish;
+}
+
 static const TypeInfo mipi_i3c_hci_types[] = {
+    {
+        .name = TYPE_MIPI_I3C_HCI_BUS,
+        .parent = TYPE_I3C_BUS,
+        .class_init = mipi_i3c_hci_bus_class_init,
+    },
     {
         .name = TYPE_MIPI_I3C_HCI,
         .parent = TYPE_SYS_BUS_DEVICE,
