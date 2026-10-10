@@ -171,6 +171,19 @@ struct I3CBus {
     bool in_ccc;
     bool in_entdaa;
     uint8_t saved_address;
+
+    /*
+     * Set by a controller that drives the bus from a thread of its own
+     * rather than from a vCPU: a target may then release the BQL while it
+     * waits on something outside QEMU. See i3c_bus_release_bql().
+     */
+    bool xfer_may_block;
+    /*
+     * QEMU_CLOCK_VIRTUAL time, in ms, by which the transfer in progress
+     * must be over, or 0 for none. A target that cannot finish by then
+     * fails the transfer rather than let the controller overrun it.
+     */
+    int64_t xfer_deadline_ms;
 };
 
 struct I3CBusClass {
@@ -189,6 +202,13 @@ I3CBus *i3c_init_bus_type(const char *type, DeviceState *parent,
                           const char *name);
 void i3c_set_target_address(I3CTarget *dev, uint8_t address);
 bool i3c_bus_busy(I3CBus *bus);
+
+/*
+ * For a target about to block: release the BQL if the bus allows it.
+ * Returns true if it did, in which case the caller retakes it with
+ * bql_lock() once it has finished waiting.
+ */
+bool i3c_bus_release_bql(I3CBus *bus);
 
 /*
  * Start a transfer on an I3C bus.

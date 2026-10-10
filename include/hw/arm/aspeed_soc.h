@@ -24,6 +24,7 @@
 #include "hw/rtc/aspeed_rtc.h"
 #include "hw/i2c/aspeed_i2c.h"
 #include "hw/i3c/aspeed_i3c.h"
+#include "hw/i3c/aspeed_i3c_hci.h"
 #include "hw/ssi/aspeed_smc.h"
 #include "hw/misc/aspeed_hace.h"
 #include "hw/misc/aspeed_sbc.h"
@@ -151,6 +152,7 @@ struct Aspeed27x0SoCState {
     AspeedINTCState intcioexp[ASPEED_IOEXP_NUM];
     GICv3State gic;
     MemoryRegion dram_empty;
+    AspeedI3CHCIState i3c_hci;
 };
 
 #define TYPE_ASPEED27X0_SOC "aspeed27x0-soc"

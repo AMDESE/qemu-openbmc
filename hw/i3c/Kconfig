@@ -13,3 +13,14 @@ config MOCK_I3C_TARGET
     bool
     select I3C
     default y if I3C_DEVICES
+
+config MIPI_I3C_HCI
+    # Generic MIPI I3C Host Controller Interface (HCI). Vendor controllers
+    # derive from it; machines with a platform bus can also create it.
+    bool
+    select I3C
+
+config ASPEED_I3C_HCI
+    # ASPEED AST2700 I3C HCI: a MIPI HCI with ASPEED INHOUSE/PHY regions.
+    bool
+    select MIPI_I3C_HCI

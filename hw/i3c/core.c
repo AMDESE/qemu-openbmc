@@ -8,6 +8,7 @@
 
 #include "qemu/osdep.h"
 #include "qemu/log.h"
+#include "qemu/main-loop.h"
 #include "qapi/error.h"
 #include "trace.h"
 #include "hw/i3c/i3c.h"
@@ -66,6 +67,15 @@ bool i3c_bus_busy(I3CBus *bus)
     return !QLIST_EMPTY(&bus->current_devs);
 }
 
+bool i3c_bus_release_bql(I3CBus *bus)
+{
+    if (!bus->xfer_may_block || !bql_locked()) {
+        return false;
+    }
+    bql_unlock();
+    return true;
+}
+
 static bool i3c_target_match(I3CTarget *candidate, uint8_t address,
                              bool is_recv, bool broadcast, bool in_entdaa)
 {
@@ -113,6 +123,7 @@ bool i3c_scan_bus(I3CBus *bus, uint8_t address, enum I3CEvent event)
 {
     BusChild *child;
     I3CNode *node, *next;
+    bool any_matched = false;
 
     /* Clear out any devices from a previous (re-)START. */
     QLIST_FOREACH_SAFE(node, &bus->current_devs, next, next) {
@@ -125,12 +136,21 @@ bool i3c_scan_bus(I3CBus *bus, uint8_t address, enum I3CEvent event)
         I3CTarget *target = I3C_TARGET(qdev);
 
         if (i3c_target_match_and_add(bus, target, address, event)) {
-            return true;
+            any_matched = true;
+            /*
+             * For a directed (non-broadcast) address at most one target can
+             * match, so short-circuit.  For the broadcast address 0x7E
+             * (CCC / ENTDAA) every matching target must be enrolled so that
+             * a subsequent i3c_send() delivers the CCC byte to all of them,
+             * not just the first child in list order.
+             */
+            if (address != I3C_BROADCAST) {
+                return true;
+            }
         }
     }
 
-    /* No one on the bus could respond. */
-    return false;
+    return any_matched;
 }
 
 /* Class-level event handling, since we do some CCCs at the class level. */
@@ -212,41 +232,40 @@ int i3c_start_send(I3CBus *bus, uint8_t address)
 
 void i3c_end_transfer(I3CBus *bus)
 {
+    BusChild *child;
     I3CTargetClass *tc;
     I3CNode *node, *next;
 
     trace_i3c_end_transfer();
 
     /*
-     * If we're in ENTDAA, we need to notify all devices when ENTDAA is done.
-     * This is because everyone initially participates due to the broadcast,
-     * but gradually drops out as they get assigned addresses.
-     * Since the current_devs list only stores who's currently participating,
-     * and not everyone who previously participated, we send the STOP to all
-     * children.
+     * STOP must reach every child on the bus, not just the targets that
+     * happen to be in current_devs at this instant.
+     *
+     * An earlier broadcast phase (ENTDAA, a broadcast CCC, or the broadcast
+     * prefix of a directed CCC) enrols every matching target so they all see
+     * the CCC code byte. A later restart with a directed address re-scans the
+     * bus and replaces current_devs with the smaller set, so targets that
+     * dropped out are removed from current_devs but were never told the
+     * transaction ended. The per-target CCC state (curr_ccc, in_ccc,
+     * ccc_byte_offset) of those targets would otherwise stay stale and
+     * corrupt the next transaction. Delivering STOP to every child resets
+     * that state and is idempotent for targets that were already clean.
      */
-    if (bus->in_entdaa) {
-        BusChild *child;
-
-        QTAILQ_FOREACH(child, &bus->parent_obj.children, sibling) {
-            DeviceState *qdev = child->child;
-            I3CTarget *t = I3C_TARGET(qdev);
-            tc = I3C_TARGET_GET_CLASS(t);
-            if (tc->event) {
-                i3c_target_event(t, I3C_STOP);
-            }
-        }
-    } else {
-        QLIST_FOREACH_SAFE(node, &bus->current_devs, next, next) {
-            I3CTarget *t = node->target;
-            tc = I3C_TARGET_GET_CLASS(t);
-            if (tc->event) {
-                i3c_target_event(t, I3C_STOP);
-            }
-            QLIST_REMOVE(node, next);
-            g_free(node);
+    QTAILQ_FOREACH(child, &bus->parent_obj.children, sibling) {
+        DeviceState *qdev = child->child;
+        I3CTarget *t = I3C_TARGET(qdev);
+        tc = I3C_TARGET_GET_CLASS(t);
+        if (tc->event) {
+            i3c_target_event(t, I3C_STOP);
         }
     }
+
+    QLIST_FOREACH_SAFE(node, &bus->current_devs, next, next) {
+        QLIST_REMOVE(node, next);
+        g_free(node);
+    }
+
     bus->broadcast = false;
     bus->in_entdaa = false;
     bus->in_ccc = false;
@@ -295,9 +314,14 @@ static int i3c_target_handle_ccc_write(I3CTarget *t, const uint8_t *data,
         t->address = 0;
         break;
     case I3C_CCCD_SETNEWDA:
-        /* If this isn't the CCC byte, it's our new address. */
+        /*
+         * If this isn't the CCC byte, it's our new address. The SETNEWDA
+         * data byte carries the dynamic address in bits [7:1] with the
+         * parity T-bit in bit [0], so shift right by one to recover the
+         * 7-bit address.
+         */
         if (*num_sent == 0) {
-            t->address = *data;
+            t->address = *data >> 1;
             *num_sent = 1;
         }
         break;
@@ -360,8 +384,15 @@ int i3c_send(I3CBus *bus, const uint8_t *data, uint32_t num_to_send,
                 continue;
             }
             ret = i3c_target_handle_ccc_write(t, data, num_to_send, num_sent);
-            /* Targets should only NACK on a direct CCC. */
-            if (ret && !CCC_IS_DIRECT(bus->ccc)) {
+            /*
+             * A target may only NACK during the directed phase of a directed
+             * CCC (after a restart to the target's dynamic address). During
+             * the broadcast prefix phase (bus->broadcast, address 0x7E) every
+             * device silently receives the CCC code and must not NACK, and a
+             * pure broadcast CCC (not CCC_IS_DIRECT) never NACKs either. Drop
+             * the error in those cases.
+             */
+            if (ret && (!CCC_IS_DIRECT(bus->ccc) || bus->broadcast)) {
                 ret = 0;
             }
         } else {
@@ -392,12 +423,15 @@ static int i3c_target_handle_ccc_read(I3CTarget *t, uint8_t *data,
         } else {
             pid = t->pid;
         }
-        /* Return the 6-byte PID, followed by BCR then DCR. */
+        /*
+         * Return the 6-byte PID followed by BCR then DCR. The PID is
+         * transmitted MSB-first, so emit byte 5 first and byte 0 last.
+         */
         while (t->ccc_byte_offset < 6) {
             if (read_count >= num_to_read) {
                 break;
             }
-            data[read_count] = (pid >> (t->ccc_byte_offset * 8)) & 0xff;
+            data[read_count] = (pid >> ((5 - t->ccc_byte_offset) * 8)) & 0xff;
             t->ccc_byte_offset++;
             read_count++;
         }
@@ -414,11 +448,13 @@ static int i3c_target_handle_ccc_read(I3CTarget *t, uint8_t *data,
         *num_read = read_count;
         break;
     case I3C_CCCD_GETPID:
+        /* The PID is transmitted MSB-first. */
         while (t->ccc_byte_offset < 6) {
             if (read_count >= num_to_read) {
                 break;
             }
-            data[read_count] = (t->pid >> (t->ccc_byte_offset * 8)) & 0xff;
+            data[read_count] =
+                (t->pid >> ((5 - t->ccc_byte_offset) * 8)) & 0xff;
             t->ccc_byte_offset++;
             read_count++;
         }

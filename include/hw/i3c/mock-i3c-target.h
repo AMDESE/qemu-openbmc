@@ -46,6 +46,7 @@ struct MockI3cTargetState {
     struct {
         uint32_t buf_size;
         uint8_t ibi_magic;
+        uint8_t nack_ccc;
     } cfg;
 };
 
