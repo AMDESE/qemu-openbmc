@@ -19,6 +19,7 @@
 #include "hw/core/registerfields.h"
 #include "hw/i3c/aspeed_i3c_hci.h"
 #include "hw/i3c/i3c.h"
+#include "hw/i3c/i3c-controller.h"
 #include "migration/vmstate.h"
 #include "qapi/error.h"
 
@@ -346,6 +347,18 @@ bool aspeed_i3c_hci_inject_ibi(AspeedI3CHCICtrl *ctrl, uint8_t da,
                                    has_byte);
 }
 
+static I3CBus *aspeed_i3c_hci_ctrl_get_bus(Object *obj)
+{
+    return aspeed_i3c_hci_get_bus(ASPEED_I3C_HCI_CTRL(obj));
+}
+
+static bool aspeed_i3c_hci_ctrl_inject_ibi(Object *obj, uint8_t da,
+                                           uint8_t mdb, bool has_mdb)
+{
+    return aspeed_i3c_hci_inject_ibi(ASPEED_I3C_HCI_CTRL(obj), da, mdb,
+                                     has_mdb);
+}
+
 static const VMStateDescription vmstate_aspeed_i3c_hci_ctrl = {
     .name = TYPE_ASPEED_I3C_HCI_CTRL,
     .version_id = 1,
@@ -366,6 +379,7 @@ static void aspeed_i3c_hci_ctrl_class_init(ObjectClass *klass,
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     MIPII3CHCIClass *mc = MIPI_I3C_HCI_CLASS(klass);
+    I3CControllerClass *ic = I3C_CONTROLLER_CLASS(klass);
 
     dc->desc = "ASPEED AST2700 I3C HCI controller";
     /* Part of the AST2700 controller block, not created on its own. */
@@ -390,6 +404,9 @@ static void aspeed_i3c_hci_ctrl_class_init(ObjectClass *klass,
     mc->post_cmd = aspeed_i3c_hci_post_cmd;
     mc->post_ibi = aspeed_i3c_hci_post_ibi;
     mc->run_job = aspeed_i3c_hci_autocmd;
+
+    ic->get_bus = aspeed_i3c_hci_ctrl_get_bus;
+    ic->inject_ibi = aspeed_i3c_hci_ctrl_inject_ibi;
 }
 
 static void aspeed_i3c_hci_instance_init(Object *obj)
@@ -437,6 +454,10 @@ static const TypeInfo aspeed_i3c_hci_types[] = {
         .parent = TYPE_MIPI_I3C_HCI,
         .instance_size = sizeof(AspeedI3CHCICtrl),
         .class_init = aspeed_i3c_hci_ctrl_class_init,
+        .interfaces = (const InterfaceInfo[]) {
+            { TYPE_I3C_CONTROLLER },
+            { },
+        },
     },
     {
         .name = TYPE_ASPEED_I3C_HCI,
