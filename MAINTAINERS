@@ -2316,6 +2316,7 @@ F: tests/qtest/sdhci-test.c
 Simulator network bridge (SNB)
 M: Sandeep Sharma <Sandeep.Sharma@amd.com>
 S: Maintained
+F: docs/system/devices/snb.rst
 F: hw/snb/
 F: include/hw/snb/
 
