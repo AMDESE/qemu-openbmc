@@ -52,6 +52,15 @@ jobs:
         working-directory: build
         run: ./qemu-system-aarch64 --version
 
+      - name: Run aspeed64 qtests
+        working-directory: build
+        run: |
+          source ../venv/bin/activate
+          for test in tests/qtest/ast2700-*-test; do
+            echo "Running $(basename $test)..."
+            $test
+          done
+
       - name: Package QEMU binary
         working-directory: build
         run: |
