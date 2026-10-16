@@ -2319,6 +2319,7 @@ S: Maintained
 F: docs/system/devices/snb.rst
 F: hw/snb/
 F: include/hw/snb/
+F: tests/qtest/snb-test.c
 
 USB
 S: Orphan
