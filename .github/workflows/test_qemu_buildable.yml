@@ -56,10 +56,7 @@ jobs:
         working-directory: build
         run: |
           source ../venv/bin/activate
-          for test in tests/qtest/ast2700-*-test; do
-            echo "Running $(basename $test)..."
-            $test
-          done
+          ./pyvenv/bin/meson test qtests-aarch64
 
       - name: Package QEMU binary
         working-directory: build
